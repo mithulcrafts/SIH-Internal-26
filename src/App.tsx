@@ -70,7 +70,7 @@ function App() {
   const fare = vehicle === 'AUTO_3' ? 68 : 92
   const distance = dropoff.name.includes('Airport') ? '12.8 km' : dropoff.name.includes('Station') ? '6.4 km' : '7.1 km'
 
-  const signIn = () => {
+  const signIn = async () => {
     setLoginError('')
     if (!email.toLowerCase().endsWith('@iiitm.ac.in')) {
       setLoginError('Use your official @iiitm.ac.in email address.')
@@ -78,8 +78,25 @@ function App() {
     }
     if (!loginSent) { setLoginSent(true); return }
     if (otp !== '123456') { setLoginError('Enter the 6-digit code. Demo code: 123456'); return }
-    localStorage.setItem('token', `demo-${Date.now()}`)
-    setStage('home')
+    
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp })
+      })
+      const data = await res.json()
+      if (data.token) {
+        localStorage.setItem('token', data.user.id)
+        setStage('home')
+      } else {
+        setLoginError(data.error || 'Login failed')
+      }
+    } catch (e) {
+      console.error(e)
+      setLoginError('Network error')
+    }
   }
 
   const logout = () => {

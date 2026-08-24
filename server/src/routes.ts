@@ -105,6 +105,11 @@ router.post('/rides/request', async (req: Request, res: Response) => {
       update: {},
       create: { id: payload.userId, email: `${payload.userId}@iiitm.ac.in`, name: 'CampusPool User' }
     })
+    // Cancel any old pending rides for this user so they don't match with themselves
+    await prisma.rideRequest.updateMany({
+      where: { userId: payload.userId, status: 'PENDING' },
+      data: { status: 'CANCELLED' }
+    })
     const ride = await prisma.rideRequest.create({ data: payload })
     const results = await matchPendingRides(payload.vehicleType, true)
     const matchedPool = results.find(r => r.pool && (r.pool as any).id)
