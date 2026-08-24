@@ -1164,6 +1164,10 @@ function PoolView({
         .then((data) => {
           if (data.pool) setActivePool(data.pool);
           if (data.members) setRealMembers(data.members);
+          if (data.error === "No active pool found") {
+            localStorage.setItem("campuspool-stage", "home");
+            window.location.href = "/";
+          }
         })
         .catch(console.error);
     };
@@ -1411,34 +1415,66 @@ function TrackingView({
   onShare: () => void;
 }) {
   const [driverInfo, setDriverInfo] = useState<any>(null);
+  const [liveEta, setLiveEta] = useState<number>(time);
+  const [liveDistance, setLiveDistance] = useState<number>(parseFloat(distance));
 
   useEffect(() => {
+    const token = localStorage.getItem("token") || `demo-user`;
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-    fetch(`${apiUrl}/api/uber/mock-dispatch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pickupLat: pickup.lat,
-        pickupLng: pickup.lng,
-        dropoffLat: dropoff.lat,
-        dropoffLng: dropoff.lng,
-      }),
-    })
+    
+    // Fetch active pool first
+    fetch(`${apiUrl}/api/pools/active/${token}`)
       .then((res) => res.json())
-      .then((data) => setDriverInfo(data))
+      .then((data) => {
+        if (data.pool && data.pool.driverDetails) {
+          setDriverInfo({ driver: data.pool.driverDetails, etaMinutes: time, distanceKm: distance });
+        } else if (data.pool) {
+          // Dispatch if no driver details
+          fetch(`${apiUrl}/api/uber/mock-dispatch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              poolId: data.pool.id,
+              pickupLat: pickup.lat,
+              pickupLng: pickup.lng,
+              dropoffLat: dropoff.lat,
+              dropoffLng: dropoff.lng,
+            }),
+          })
+            .then((res) => res.json())
+            .then((dispatchData) => setDriverInfo(dispatchData))
+            .catch(console.error);
+        }
+      })
       .catch(console.error);
-  }, [pickup, dropoff]);
+  }, [pickup, dropoff, time, distance]);
 
-  const eta = driverInfo?.etaMinutes || time;
+  // Live ETA countdown simulation
+  useEffect(() => {
+    if (!driverInfo) return;
+    const interval = setInterval(() => {
+      setLiveEta(prev => Math.max(1, prev - 1));
+      setLiveDistance(prev => Math.max(0.1, prev - (prev * 0.1)));
+    }, 60000); // Decrement every minute
+    return () => clearInterval(interval);
+  }, [driverInfo]);
+
+  const eta = driverInfo?.etaMinutes ? Math.min(driverInfo.etaMinutes, liveEta) : liveEta;
   const driverName = driverInfo?.driver?.name || "Assigning...";
-  const driverVehicle = driverInfo?.driver?.vehicle || "Finding nearby cab";
-  const driverPlate = driverInfo?.driver?.plate || "...";
+  const driverVehicle = driverInfo?.driver?.vehicle || "Finding nearby vehicle";
+  const driverPlate = driverInfo?.driver?.vehicleNumber || "...";
+  const driverPhone = driverInfo?.driver?.phone || "";
   const driverRating = driverInfo?.driver?.rating || 5.0;
-  const displayDistance = driverInfo?.distanceKm || distance;
+  const displayDistance = liveDistance.toFixed(1) + " km";
   const initials = driverName
     .split(" ")
     .map((n: string) => n[0])
     .join("");
+
+  const handleCancel = () => {
+    localStorage.setItem("campuspool-stage", "home");
+    window.location.href = "/";
+  };
 
   return (
     <div className="tracking-view">
@@ -1518,7 +1554,7 @@ function TrackingView({
           <small>{driverPlate}</small>
         </div>
         <a
-          href="tel:+919876543210"
+          href={`tel:${driverPhone}`}
           className="call-button"
           style={{
             display: "flex",
@@ -1565,6 +1601,14 @@ function TrackingView({
               <ShieldCheck size={18} /> SOS
             </>
           )}
+        </button>
+      </div>
+      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+        <button 
+          onClick={handleCancel}
+          style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}
+        >
+          Cancel Ride
         </button>
       </div>
       {sosSent && (

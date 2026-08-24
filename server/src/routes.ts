@@ -290,7 +290,20 @@ router.post('/payments/verify', (req: Request, res: Response) => {
   return res.json({ verified: true, paymentId: paymentId || `pay_demo_${mockStore.nextId()}` })
 })
 router.post('/uber/mock-dispatch', async (req: Request, res: Response) => {
-  const trip = await dispatchTrip({ pickupLat: bodyNumber(req.body.pickupLat), pickupLng: bodyNumber(req.body.pickupLng), dropoffLat: bodyNumber(req.body.dropoffLat), dropoffLng: bodyNumber(req.body.dropoffLng) })
+  let vehicleType: string | undefined = undefined;
+  if (prisma && bodyString(req.body.poolId)) {
+    const pool = await prisma.pool.findUnique({ where: { id: bodyString(req.body.poolId) } })
+    if (pool) vehicleType = pool.vehicleType;
+  }
+  
+  const trip = await dispatchTrip({ 
+    pickupLat: bodyNumber(req.body.pickupLat), 
+    pickupLng: bodyNumber(req.body.pickupLng), 
+    dropoffLat: bodyNumber(req.body.dropoffLat), 
+    dropoffLng: bodyNumber(req.body.dropoffLng),
+    vehicleType
+  })
+  
   if (prisma && bodyString(req.body.poolId)) {
     await prisma.pool.update({ where: { id: bodyString(req.body.poolId) }, data: { status: 'DISPATCHED', driverDetails: trip.driver as import('@prisma/client').Prisma.InputJsonValue, shareTrackingUrl: trip.trackingUrl } })
   }

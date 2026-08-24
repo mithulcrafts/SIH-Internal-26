@@ -44,14 +44,19 @@ export async function dispatchTrip(params: {
   pickupLng: number
   dropoffLat: number
   dropoffLng: number
+  vehicleType?: string
 }): Promise<{ driver: Record<string, unknown>; trackingUrl: string }> {
-  const mockDriver = {
-    name: 'Ramesh Sharma',
-    vehicle: 'White Swift Dzire',
-    vehicleNumber: 'MP-07-AB-1234',
-    phone: '+91 98765 43210',
-    rating: 4.8,
-  }
+  const autoDrivers = [
+    { name: 'Ramesh Sharma', vehicle: 'Bajaj RE Auto', vehicleNumber: 'MP-07-AB-1234', phone: '+91 98765 43210', rating: 4.8 },
+    { name: 'Suresh Kumar', vehicle: 'TVS King Auto', vehicleNumber: 'MP-07-CD-5678', phone: '+91 91234 56789', rating: 4.9 },
+  ]
+  const cabDrivers = [
+    { name: 'Vikram Singh', vehicle: 'White Swift Dzire', vehicleNumber: 'MP-07-EF-9012', phone: '+91 99887 76655', rating: 4.7 },
+    { name: 'Amit Patel', vehicle: 'White Maruti WagonR', vehicleNumber: 'MP-07-GH-3456', phone: '+91 98765 12345', rating: 4.9 },
+  ]
+
+  const driverList = params.vehicleType === 'AUTO_3' ? autoDrivers : cabDrivers
+  const mockDriver = driverList[Math.floor(Math.random() * driverList.length)]
 
   if (!isUberEnabled()) {
     return { driver: mockDriver, trackingUrl: `/track/mock_${Date.now()}` }
