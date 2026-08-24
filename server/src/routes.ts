@@ -263,19 +263,21 @@ router.post('/pools/:id/sequence', async (req: Request, res: Response) => {
 })
 
 router.post('/pools/:id/split', async (req: Request, res: Response) => {
-  const totalFare = bodyNumber(req.body.totalFare) || 204
   const distances = Array.isArray(req.body.distances) ? req.body.distances as Array<{ riderId?: string; distanceKm?: number }> : []
   if (prisma) {
+    const pool = await prisma.pool.findUnique({ where: { id: req.params.id } })
+    const totalFare = bodyNumber(req.body.totalFare) || pool?.totalEstimatedFare || 204
     const members = await prisma.poolMember.findMany({ where: { poolId: req.params.id }, orderBy: { stopSequence: 'asc' } })
-    const fareDistances = members.map((member) => ({ riderId: member.userId, distanceKm: Number(distances.find((item) => item.riderId === member.userId)?.distanceKm) || 0 }))
+    const fareDistances = members.map((member) => ({ riderId: member.userId, distanceKm: Number(distances.find((item) => item.riderId === member.userId)?.distanceKm) || member.distanceKm || 0 }))
     const shares = await updatePoolMemberFares(prisma, req.params.id, totalFare, fareDistances)
-    return res.json({ shares })
+    return res.json({ shares, totalFare })
   }
+  const totalFare = bodyNumber(req.body.totalFare) || 204
   const members = mockStore.poolMembers.filter((member) => member.poolId === req.params.id).sort((a, b) => a.stopSequence - b.stopSequence)
-  const fareDistances = members.map((member) => ({ riderId: member.userId, distanceKm: Number(distances.find((item) => item.riderId === member.userId)?.distanceKm) || 0 }))
+  const fareDistances = members.map((member) => ({ riderId: member.userId, distanceKm: Number(distances.find((item) => item.riderId === member.userId)?.distanceKm) || member.distanceKm || 0 }))
   const shares = calculateDistanceWeightedFares(totalFare, fareDistances)
   members.forEach((member) => { member.individualFare = shares.find((share) => share.riderId === member.userId)?.individualFare || 0 })
-  return res.json({ shares })
+  return res.json({ shares, totalFare })
 })
 
 router.post('/payments/mock-order', async (req: Request, res: Response) => {
