@@ -1320,12 +1320,12 @@ function TrackingView({
       .catch(console.error);
   }, [pickup, dropoff]);
 
-  const eta = driverInfo?.etaMinutes || 3;
+  const eta = driverInfo?.etaMinutes || time;
   const driverName = driverInfo?.driver?.name || "Assigning...";
   const driverVehicle = driverInfo?.driver?.vehicle || "Finding nearby cab";
   const driverPlate = driverInfo?.driver?.plate || "...";
   const driverRating = driverInfo?.driver?.rating || 5.0;
-  const distance = driverInfo?.distanceKm || 1.8;
+  const displayDistance = driverInfo?.distanceKm || distance;
   const initials = driverName
     .split(" ")
     .map((n: string) => n[0])
@@ -1395,7 +1395,7 @@ function TrackingView({
             </em>
           </strong>
           <span style={{ fontSize: "12px", color: "#94A3B8" }}>
-            {distance} km away
+            {displayDistance} km away
           </span>
         </div>
       </div>
@@ -1430,7 +1430,7 @@ function TrackingView({
         </div>
         <div className="progress-stops">
           <span>On the way</span>
-          <span>{eta + Math.round(distance * 3)} min left</span>
+          <span>{eta + Math.round(parseFloat(displayDistance as string) * 3)} min left</span>
         </div>
       </div>
       <div className="tracking-actions">
