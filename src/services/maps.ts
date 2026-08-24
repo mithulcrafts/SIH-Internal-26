@@ -75,14 +75,26 @@ const mockLocations: GeoLocation[] = [
   { name: 'Rajmata Vijayaraje Scindia Airport', lat: 26.2941, lng: 78.2272 },
   { name: 'MITS Gwalior', lat: 26.2634, lng: 78.2103 },
   { name: 'JIET Gwalior', lat: 26.2589, lng: 78.2015 },
+  { name: 'BH-1', lat: 26.2495, lng: 78.174 },
+  { name: 'BH-2', lat: 26.2488, lng: 78.1732 },
+  { name: 'BH-3', lat: 26.2501, lng: 78.1748 },
+  { name: 'BH-4', lat: 26.251, lng: 78.1755 },
+  { name: 'Girls Hostel (GH)', lat: 26.2475, lng: 78.1718 },
+  { name: 'Main Gate', lat: 26.246, lng: 78.1702 },
+  { name: 'Cafeteria', lat: 26.248, lng: 78.173 },
+  { name: 'Satpura', lat: 26.249, lng: 78.176 },
+  { name: 'Academic Block', lat: 26.247, lng: 78.174 },
+  { name: 'Admin Block', lat: 26.2465, lng: 78.1735 },
+  { name: 'MDP', lat: 26.2485, lng: 78.172 },
 ]
 
 function mockSearch(query: string): GeoLocation[] {
-  const q = query.toLowerCase()
-  return mockLocations.filter((l) => l.name.toLowerCase().includes(q))
+  const q = query.toLowerCase().replace(/[\s-]/g, '')
+  return mockLocations.filter((l) => l.name.toLowerCase().replace(/[\s-]/g, '').includes(q))
 }
 
 function mockGeocode(address: string): { lat: number; lng: number } | null {
-  const found = mockLocations.find((l) => l.name.toLowerCase().includes(address.toLowerCase()))
+  const q = address.toLowerCase().replace(/[\s-]/g, '')
+  const found = mockLocations.find((l) => l.name.toLowerCase().replace(/[\s-]/g, '').includes(q))
   return found ? { lat: found.lat, lng: found.lng } : null
 }
