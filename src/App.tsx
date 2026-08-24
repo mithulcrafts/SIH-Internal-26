@@ -155,7 +155,7 @@ function App() {
       {stage === 'request' && <RequestView pickup={pickup} setPickup={setPickup} dropoff={dropoff} setDropoff={setDropoff} vehicle={vehicle} setVehicle={setVehicle} when={when} setWhen={setWhen} prebookTime={prebookTime} setPrebookTime={setPrebookTime} query={destinationQuery} setQuery={setDestinationQuery} destinations={filteredDestinations} mapPin={mapPin} setMapPin={setMapPin} onBack={() => setStage('home')} onRequest={requestRide} fare={fare} />}
       {stage === 'matching' && <MatchingView pickup={pickup} dropoff={dropoff} />}
       {stage === 'pool' && <PoolView pickup={pickup} dropoff={dropoff} vehicle={vehicle} fare={fare} paid={paid} setPaid={setPaid} chatOpen={chatOpen} setChatOpen={setChatOpen} messages={messages} message={chatMessage} setMessage={setChatMessage} sendMessage={sendMessage} onTrack={() => setStage('tracking')} />}
-      {stage === 'tracking' && <TrackingView sosSent={sosSent} onSos={() => setSosSent(true)} onBack={() => setStage('pool')} />}
+      {stage === 'tracking' && <TrackingView pickup={pickup} dropoff={dropoff} sosSent={sosSent} onSos={() => setSosSent(true)} onBack={() => setStage('pool')} onShare={() => { setToast('Trip tracking link copied to clipboard!'); window.setTimeout(() => setToast(''), 2500) }} />}
     </main>
     <BottomNav stage={stage} onHome={() => setStage('home')} onRides={() => setStage('pool')} onSafety={() => setStage('tracking')} onSupport={() => setStage('support')} />
     {toast && <div className="toast"><Check size={16} /> {toast}</div>}
@@ -201,7 +201,37 @@ function PoolView({ pickup, dropoff, vehicle, fare, paid, setPaid, chatOpen, set
 
 function ChatDrawer({ messages, message, setMessage, sendMessage, onClose }: { messages: { name: string; text: string; time: string }[]; message: string; setMessage: (value: string) => void; sendMessage: () => void; onClose: () => void }) { return <div className="drawer-backdrop" onClick={onClose}><aside className="chat-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-head"><div><p className="eyebrow">POOL CHAT</p><h3>Ride crew</h3></div><button onClick={onClose}><X size={20} /></button></div><div className="chat-messages">{messages.map((item, index) => <div className={item.name === 'You' ? 'chat-item own' : 'chat-item'} key={`${item.text}-${index}`}><strong>{item.name}</strong><p>{item.text}</p><small>{item.time}</small></div>)}</div><div className="chat-input"><input value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Message your crew" /><button onClick={sendMessage}><ChevronRight size={18} /></button></div></aside></div> }
 
-function TrackingView({ sosSent, onSos, onBack }: { sosSent: boolean; onSos: () => void; onBack: () => void }) { return <div className="tracking-view"><button className="back-button" onClick={onBack}>← <span>Pool room</span></button><div className="tracking-head"><div><p className="eyebrow success-label">LIVE RIDE · ON THE WAY</p><h2>Heading to the station</h2><p>Your driver is 3 minutes away.</p></div><span className="live-dot"><span /> LIVE</span></div><div className="tracking-map"><div className="track-road track-one" /><div className="track-road track-two" /><div className="track-route" /><span className="track-campus">IIITM</span><span className="driver-car"><CarFront size={22} /></span><span className="track-destination"><MapPin size={27} fill="#D99B26" /></span><div className="eta-card"><small>ARRIVING IN</small><strong>03 <em>min</em></strong><span>1.8 km away</span></div></div><section className="driver-card"><span className="driver-avatar">RS</span><div className="driver-info"><strong>Ramesh Sharma</strong><span><Star size={14} fill="#D99B26" /> 4.8 · White Swift Dzire</span><small>MP-07-AB-1234</small></div><button className="call-button"><Phone size={18} /></button></section><div className="trip-progress"><div className="progress-label"><span>Campus</span><span>Destination</span></div><div className="progress-track"><span /></div><div className="progress-stops"><span>On the way</span><span>12 min left</span></div></div><div className="tracking-actions"><button className="share-button"><Compass size={18} /> Share trip status</button><button className={sosSent ? 'sos-button sent' : 'sos-button'} onClick={onSos}>{sosSent ? <><Check size={18} /> Alert sent</> : <><ShieldCheck size={18} /> SOS</>}</button></div>{sosSent && <div className="sos-confirm"><Check size={17} /><span>Emergency contacts notified with your live location.</span></div>}</div> }
+function TrackingView({ pickup, dropoff, sosSent, onSos, onBack, onShare }: { pickup: Location; dropoff: Location; sosSent: boolean; onSos: () => void; onBack: () => void; onShare: () => void }) { 
+  const [driverInfo, setDriverInfo] = useState<any>(null)
+  
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+    fetch(`${apiUrl}/api/uber/mock-dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pickupLat: pickup.lat,
+        pickupLng: pickup.lng,
+        dropoffLat: dropoff.lat,
+        dropoffLng: dropoff.lng
+      })
+    }).then(res => res.json()).then(data => setDriverInfo(data)).catch(console.error)
+  }, [pickup, dropoff])
+
+  const eta = driverInfo?.etaMinutes || 3
+  const driverName = driverInfo?.driver?.name || 'Assigning...'
+  const driverVehicle = driverInfo?.driver?.vehicle || 'Finding nearby cab'
+  const driverPlate = driverInfo?.driver?.plate || '...'
+  const driverRating = driverInfo?.driver?.rating || 5.0
+  const distance = driverInfo?.distanceKm || 1.8
+  const initials = driverName.split(' ').map((n: string) => n[0]).join('')
+
+  return <div className="tracking-view"><button className="back-button" onClick={onBack}>← <span>Pool room</span></button><div className="tracking-head"><div><p className="eyebrow success-label">LIVE RIDE · ON THE WAY</p><h2>Heading to {dropoff.name.split(' ')[0]}</h2><p>Your driver is {eta} minutes away.</p></div><span className="live-dot"><span /> LIVE</span></div>
+  <div className="tracking-map-real" style={{ width: '100%', height: '260px', padding: '0 20px', marginBottom: '16px', position: 'relative' }}>
+    <InteractiveMap pickup={pickup} dropoff={dropoff} onMapClick={() => {}} />
+    <div className="eta-card-overlay" style={{ position: 'absolute', top: '16px', right: '36px', background: 'white', padding: '10px 14px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center' }}><small style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>ARRIVING IN</small><strong style={{ fontSize: '24px', lineHeight: 1 }}>{eta} <em style={{ fontSize: '14px', fontStyle: 'normal', color: '#64748B' }}>min</em></strong><span style={{ fontSize: '12px', color: '#94A3B8' }}>{distance} km away</span></div>
+  </div>
+  <section className="driver-card"><span className="driver-avatar">{initials}</span><div className="driver-info"><strong>{driverName}</strong><span><Star size={14} fill="#D99B26" /> {driverRating} · {driverVehicle}</span><small>{driverPlate}</small></div><a href="tel:+919876543210" className="call-button" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Phone size={18} /></a></section><div className="trip-progress"><div className="progress-label"><span>{pickup.name}</span><span>{dropoff.name}</span></div><div className="progress-track"><span /></div><div className="progress-stops"><span>On the way</span><span>{eta + Math.round(distance * 3)} min left</span></div></div><div className="tracking-actions"><button className="share-button" onClick={() => { navigator.clipboard.writeText(window.location.href).catch(() => {}); onShare(); }}><Compass size={18} /> Share trip status</button><button className={sosSent ? 'sos-button sent' : 'sos-button'} onClick={onSos}>{sosSent ? <><Check size={18} /> Alert sent</> : <><ShieldCheck size={18} /> SOS</>}</button></div>{sosSent && <div className="sos-confirm"><Check size={17} /><span>Emergency contacts notified with your live location.</span></div>}</div> }
 
 function SupportView() {
   const [openFaq, setOpenFaq] = useState<number | null>(0)
