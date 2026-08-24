@@ -1648,7 +1648,7 @@ function TrackingView({
         <div>
           <p className="eyebrow success-label" style={{ color: '#000', backgroundColor: '#F3F4F6', display: 'inline-block', padding: '4px 8px', borderRadius: '4px' }}>LIVE UBER RIDE · ON THE WAY</p>
           <h2>Heading to {dropoff.name}</h2>
-          <p>Your Uber driver is {eta} minutes away.</p>
+          <p>{!driverInfo ? "Waiting for driver assignment..." : `Your Uber driver is ${eta} minutes away.`}</p>
         </div>
         <span className="live-dot">
           <span className="ping" />

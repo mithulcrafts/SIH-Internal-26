@@ -329,8 +329,12 @@ router.post('/uber/mock-dispatch', async (req: Request, res: Response) => {
     vehicleType
   })
   
-  if (prisma && bodyString(req.body.poolId)) {
-    await prisma.pool.update({ where: { id: bodyString(req.body.poolId) }, data: { status: 'DISPATCHED', driverDetails: JSON.stringify(trip.driver), shareTrackingUrl: trip.trackingUrl } })
+  if (prisma && bodyString(req.body.poolId) && bodyString(req.body.poolId) !== 'demo-pool-id') {
+    const poolId = bodyString(req.body.poolId);
+    const existingPool = await prisma.pool.findUnique({ where: { id: poolId } });
+    if (existingPool) {
+      await prisma.pool.update({ where: { id: poolId }, data: { status: 'DISPATCHED', driverDetails: JSON.stringify(trip.driver), shareTrackingUrl: trip.trackingUrl } })
+    }
   }
   return res.json(trip)
 })
