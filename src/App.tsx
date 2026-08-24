@@ -364,6 +364,16 @@ function App() {
           <Check size={16} /> {toast}
         </div>
       )}
+      <button 
+        style={{ position: 'fixed', bottom: '80px', right: '20px', zIndex: 9999, background: '#1E4E8C', color: 'white', padding: '10px 15px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}
+        onClick={() => {
+          const mockId = "demo-" + Math.floor(Math.random() * 10000);
+          localStorage.setItem("token", mockId);
+          window.location.reload();
+        }}
+      >
+        <Users size={16} /> Simulate Another Rider
+      </button>
     </div>
   );
 }
@@ -1067,13 +1077,20 @@ function PoolView({
   useEffect(() => {
     const token = localStorage.getItem("token") || `demo-user`;
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-    fetch(`${apiUrl}/api/pools/active/${token}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.pool) setActivePool(data.pool);
-        if (data.members) setRealMembers(data.members);
-      })
-      .catch(console.error);
+    
+    const fetchPool = () => {
+      fetch(`${apiUrl}/api/pools/active/${token}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.pool) setActivePool(data.pool);
+          if (data.members) setRealMembers(data.members);
+        })
+        .catch(console.error);
+    };
+
+    fetchPool();
+    const interval = setInterval(fetchPool, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const poolIdPrefix = activePool?.id

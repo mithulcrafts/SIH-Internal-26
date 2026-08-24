@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { prisma } from './db'
 import { mockStore, type MockPool, type MockRideRequest } from './mockStore'
-import { clusterRideRequests, type GroupingVehicleType, type RideCandidate } from './services/groupingEngine'
+import { clusterRideRequests, isCompatible, type GroupingVehicleType, type RideCandidate } from './services/groupingEngine'
 import { calculateDistanceWeightedFares, updatePoolMemberFares } from './services/fareSplitter'
 import { optimizeRoute } from './services/routeOptimizer'
 import { createOrder, verifySignature } from './services/razorpay'
@@ -26,11 +26,47 @@ export async function matchPendingRides(vehicleType: GroupingVehicleType, requir
     const clusters = clusterRideRequests(pending.map(toRideCandidate), vehicleType)
     
     for (const cluster of clusters) {
-      // Create the pool even if size is 1, as per user's strict real-data requirement
-      const pool = await prisma.pool.create({ data: { vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType) } })
-      await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: pool.id, userId: ride.userId, stopSequence: index + 1 })) })
-      await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })
-      results.push({ pool, matchedRiders: cluster.rides.length })
+      const openPools = await prisma.pool.findMany({
+        where: { status: 'OPEN', vehicleType },
+        include: { members: true }
+      });
+      
+      let matchedIntoPool = null;
+      for (const openPool of openPools) {
+        if (openPool.members.length + cluster.rides.length <= openPool.maxCapacity) {
+          const memberUserIds = openPool.members.map(m => m.userId);
+          const originalRequests = await prisma.rideRequest.findMany({
+            where: { userId: { in: memberUserIds }, status: 'MATCHED' },
+            orderBy: { createdAt: 'desc' }
+          });
+          const poolCandidates = [];
+          for (const uid of memberUserIds) {
+             const req = originalRequests.find(r => r.userId === uid);
+             if (req) poolCandidates.push(toRideCandidate(req));
+          }
+          
+          if (poolCandidates.length > 0 && isCompatible(cluster.rides[0], poolCandidates)) {
+             matchedIntoPool = openPool;
+             break;
+          }
+        }
+      }
+
+      if (matchedIntoPool) {
+        const currentCount = matchedIntoPool.members.length;
+        await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: matchedIntoPool.id, userId: ride.userId, stopSequence: currentCount + index + 1 })) })
+        await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })
+        
+        if (currentCount + cluster.rides.length >= matchedIntoPool.maxCapacity) {
+          await prisma.pool.update({ where: { id: matchedIntoPool.id }, data: { status: 'FULL' } })
+        }
+        results.push({ pool: matchedIntoPool, matchedRiders: cluster.rides.length })
+      } else {
+        const pool = await prisma.pool.create({ data: { vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType) } })
+        await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: pool.id, userId: ride.userId, stopSequence: index + 1 })) })
+        await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })
+        results.push({ pool, matchedRiders: cluster.rides.length })
+      }
     }
     return results
   }
