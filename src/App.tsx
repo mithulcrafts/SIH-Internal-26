@@ -1138,7 +1138,11 @@ function PoolView({
     paid: m.paymentStatus === "PAID",
     stop: m.stopSequence,
     userId: m.userId,
+    individualFare: m.individualFare
   }));
+
+  const myMember = realMembers.find(m => m.userId === (localStorage.getItem("token") || `demo-user`));
+  const estimatedShare = myMember?.individualFare > 0 ? myMember.individualFare : fare;
 
   return (
     <div className="pool-view">
@@ -1242,7 +1246,7 @@ function PoolView({
         <div className="payment-top">
           <div>
             <p className="eyebrow">YOUR ESTIMATED SHARE</p>
-            <h2>₹{paid ? 68 : fare}</h2>
+            <h2>₹{paid ? estimatedShare : estimatedShare}</h2>
           </div>
           <span className="split-badge">
             <WalletCards size={15} /> Distance split
@@ -1257,7 +1261,7 @@ function PoolView({
         </div>
         {!paid ? (
           <button className="primary-button wide" onClick={() => setPaid(true)}>
-            <CreditCard size={17} /> Pay with Razorpay · ₹{fare}
+            <CreditCard size={17} /> Pay with Razorpay · ₹{estimatedShare}
           </button>
         ) : (
           <button className="success-button wide" onClick={onTrack}>

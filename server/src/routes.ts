@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import jwt from 'jsonwebtoken'
 import { prisma } from './db'
 import { mockStore, type MockPool, type MockRideRequest } from './mockStore'
-import { clusterRideRequests, isCompatible, type GroupingVehicleType, type RideCandidate } from './services/groupingEngine'
+import { clusterRideRequests, isCompatible, haversine, type GroupingVehicleType, type RideCandidate } from './services/groupingEngine'
 import { calculateDistanceWeightedFares, updatePoolMemberFares } from './services/fareSplitter'
 import { optimizeRoute } from './services/routeOptimizer'
 import { createOrder, verifySignature } from './services/razorpay'
@@ -60,11 +60,31 @@ export async function matchPendingRides(vehicleType: GroupingVehicleType, requir
         if (currentCount + cluster.rides.length >= matchedIntoPool.maxCapacity) {
           await prisma.pool.update({ where: { id: matchedIntoPool.id }, data: { status: 'FULL' } })
         }
+        
+        const allMembers = await prisma.poolMember.findMany({ where: { poolId: matchedIntoPool.id } });
+        const allRequests = await prisma.rideRequest.findMany({
+          where: { userId: { in: allMembers.map(m => m.userId) }, status: 'MATCHED' },
+          orderBy: { createdAt: 'desc' }
+        });
+        const distances = allMembers.map(m => {
+          const req = allRequests.find(r => r.userId === m.userId);
+          const distanceKm = req ? haversine(req.pickupLat, req.pickupLng, req.dropoffLat, req.dropoffLng) : 0;
+          return { riderId: m.userId, distanceKm };
+        });
+        await updatePoolMemberFares(prisma, matchedIntoPool.id, fareFor(vehicleType), distances);
+        
         results.push({ pool: matchedIntoPool, matchedRiders: cluster.rides.length })
       } else {
         const pool = await prisma.pool.create({ data: { vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType) } })
         await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: pool.id, userId: ride.userId, stopSequence: index + 1 })) })
         await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })
+        
+        const distances = cluster.rides.map(r => ({
+          riderId: r.userId,
+          distanceKm: haversine(r.pickupLat, r.pickupLng, r.dropoffLat, r.dropoffLng)
+        }));
+        await updatePoolMemberFares(prisma, pool.id, fareFor(vehicleType), distances);
+        
         results.push({ pool, matchedRiders: cluster.rides.length })
       }
     }
