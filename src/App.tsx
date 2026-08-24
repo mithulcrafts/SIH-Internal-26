@@ -1152,6 +1152,7 @@ function PoolView({
 }) {
   const [activePool, setActivePool] = useState<any>(null);
   const [realMembers, setRealMembers] = useState<any[]>([]);
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token") || `demo-user`;
@@ -1182,7 +1183,8 @@ function PoolView({
     paid: m.paymentStatus === "PAID",
     stop: m.stopSequence,
     userId: m.userId,
-    individualFare: m.individualFare
+    individualFare: m.individualFare,
+    distanceKm: m.distanceKm || 0
   }));
 
   const myMember = realMembers.find(m => m.userId === (localStorage.getItem("token") || `demo-user`));
@@ -1292,9 +1294,9 @@ function PoolView({
             <p className="eyebrow">YOUR ESTIMATED SHARE</p>
             <h2>₹{paid ? estimatedShare : estimatedShare}</h2>
           </div>
-          <span className="split-badge">
+          <button className="split-badge" onClick={() => setSplitModalOpen(true)} style={{ border: 'none', background: '#F3F4F6', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#4B5563' }}>
             <WalletCards size={15} /> Distance split
-          </span>
+          </button>
         </div>
         <div className="payment-bar">
           <span style={{ width: paid ? "100%" : "66%" }} />
@@ -1320,6 +1322,13 @@ function PoolView({
           setMessage={setMessage}
           sendMessage={sendMessage}
           onClose={() => setChatOpen(false)}
+        />
+      )}
+      {splitModalOpen && (
+        <DistanceSplitModal
+          members={displayMembers}
+          totalFare={activePool?.totalEstimatedFare || (vehicle === "AUTO_3" ? 60 : 92)}
+          onClose={() => setSplitModalOpen(false)}
         />
       )}
     </div>
@@ -1755,6 +1764,68 @@ function BottomNav({
         <span>Support</span>
       </button>
     </nav>
+  );
+}
+
+function DistanceSplitModal({
+  members,
+  totalFare,
+  onClose,
+}: {
+  members: any[];
+  totalFare: number;
+  onClose: () => void;
+}) {
+  const totalDistance = members.reduce((sum, m) => sum + (m.distanceKm || 0), 0);
+  
+  return (
+    <div className="drawer-backdrop" onClick={onClose}>
+      <aside className="chat-drawer" onClick={(e) => e.stopPropagation()} style={{ height: 'auto', maxHeight: '80vh', padding: '24px' }}>
+        <div className="drawer-head" style={{ borderBottom: 'none', padding: '0 0 16px 0' }}>
+          <div>
+            <p className="eyebrow">FARE CALCULATION</p>
+            <h3>Distance Split Breakdown</h3>
+          </div>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        
+        <div style={{ background: '#F9FAFB', padding: '16px', borderRadius: '12px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ color: '#6B7280', fontSize: '14px' }}>Total Pool Fare</span>
+            <strong style={{ fontSize: '16px' }}>₹{totalFare}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: '#6B7280', fontSize: '14px' }}>Combined Distance</span>
+            <strong style={{ fontSize: '16px' }}>{totalDistance.toFixed(2)} km</strong>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {members.map((m, i) => {
+            const pct = totalDistance > 0 ? ((m.distanceKm || 0) / totalDistance) * 100 : (100 / members.length);
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span className={`member-avatar ${m.color}`} style={{ width: '32px', height: '32px', fontSize: '12px' }}>
+                    {m.initials}
+                  </span>
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '14px', marginBottom: '2px' }}>{m.name} {m.userId === (localStorage.getItem("token") || 'demo-user') ? '(You)' : ''}</strong>
+                    <span style={{ color: '#6B7280', fontSize: '12px' }}>{m.distanceKm?.toFixed(2) || 0} km · {pct.toFixed(0)}%</span>
+                  </div>
+                </div>
+                <strong style={{ fontSize: '15px' }}>₹{m.individualFare}</strong>
+              </div>
+            );
+          })}
+        </div>
+        
+        <div style={{ marginTop: '32px', padding: '16px', background: '#FEF3C7', color: '#92400E', borderRadius: '8px', fontSize: '13px', lineHeight: '1.5' }}>
+          <strong style={{ display: 'block', marginBottom: '4px' }}>How is this calculated?</strong>
+          The base pool fare is split proportionally based on the distance each rider travels. Riders traveling longer distances pay a proportionally higher share of the total fare.
+        </div>
+      </aside>
+    </div>
   );
 }
 

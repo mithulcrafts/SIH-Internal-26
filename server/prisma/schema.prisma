@@ -56,6 +56,7 @@ model PoolMember {
   userId        String
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   stopSequence  Int
+  distanceKm    Float         @default(0)
   individualFare Float         @default(0)
   paymentStatus String  @default("PENDING")
   paymentId     String?
