@@ -1415,6 +1415,8 @@ function TrackingView({
   const [tripEnded, setTripEnded] = useState(false);
   const [amountDue, setAmountDue] = useState<number>(0);
   const [paying, setPaying] = useState(false);
+  const [dispatchFailed, setDispatchFailed] = useState(false);
+  const [poolData, setPoolData] = useState<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token") || `demo-user`;
@@ -1424,29 +1426,48 @@ function TrackingView({
     fetch(`${apiUrl}/api/pools/active/${token}`)
       .then((res) => res.json())
       .then((data) => {
+        setPoolData(data);
         if (data.pool && data.pool.driverDetails) {
           const parsedDriver = typeof data.pool.driverDetails === 'string' ? JSON.parse(data.pool.driverDetails) : data.pool.driverDetails;
           setDriverInfo({ driver: parsedDriver, etaMinutes: time, distanceKm: distance, poolId: data.pool.id });
         } else if (data.pool) {
           // Dispatch if no driver details
-          fetch(`${apiUrl}/api/uber/mock-dispatch`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              poolId: data.pool.id,
-              pickupLat: pickup.lat,
-              pickupLng: pickup.lng,
-              dropoffLat: dropoff.lat,
-              dropoffLng: dropoff.lng,
-            }),
-          })
-            .then((res) => res.json())
-            .then((dispatchData) => setDriverInfo(dispatchData))
-            .catch(console.error);
+          handleDispatch(data.pool.id);
         }
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setDispatchFailed(true);
+      });
   }, [pickup, dropoff, time, distance]);
+
+  const handleDispatch = (pid: string) => {
+    setDispatchFailed(false);
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+    fetch(`${apiUrl}/api/uber/mock-dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        poolId: pid,
+        pickupLat: pickup.lat,
+        pickupLng: pickup.lng,
+        dropoffLat: dropoff.lat,
+        dropoffLng: dropoff.lng,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Dispatch failed");
+        return res.json();
+      })
+      .then((dispatchData) => {
+        setDriverInfo(dispatchData);
+        setDispatchFailed(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setDispatchFailed(true);
+      });
+  };
 
   // Live ETA countdown simulation
   useEffect(() => {
@@ -1555,7 +1576,7 @@ function TrackingView({
       <div className="tracking-head">
         <div>
           <p className="eyebrow success-label" style={{ color: '#000', backgroundColor: '#F3F4F6', display: 'inline-block', padding: '4px 8px', borderRadius: '4px' }}>LIVE UBER RIDE · ON THE WAY</p>
-          <h2>Heading to {dropoff.name.split(" ")[0]}</h2>
+          <h2>Heading to {dropoff.name}</h2>
           <p>Your Uber driver is {eta} minutes away.</p>
         </div>
         <span className="live-dot">
@@ -1674,16 +1695,24 @@ function TrackingView({
           )}
         </button>
       </div>
-      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', padding: '0 20px' }}>
+      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', padding: '0 20px', gap: '8px' }}>
         <button 
           onClick={handleCancel}
-          style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}
+          style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'left' }}
         >
           Cancel Ride
         </button>
+        {(!driverInfo || dispatchFailed) && poolData && poolData.pool && (
+          <button 
+            onClick={() => handleDispatch(poolData.pool.id)}
+            style={{ background: 'transparent', border: 'none', color: '#10B981', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'center' }}
+          >
+            Retry Assign Driver
+          </button>
+        )}
         <button 
           onClick={() => setTripEnded(true)}
-          style={{ background: 'transparent', border: 'none', color: '#3B82F6', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}
+          style={{ background: 'transparent', border: 'none', color: '#3B82F6', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'right' }}
         >
           Dev: End Trip
         </button>
