@@ -1417,6 +1417,9 @@ function TrackingView({
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [liveEta, setLiveEta] = useState<number>(time);
   const [liveDistance, setLiveDistance] = useState<number>(parseFloat(distance));
+  const [tripEnded, setTripEnded] = useState(false);
+  const [amountDue, setAmountDue] = useState<number>(0);
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token") || `demo-user`;
@@ -1451,13 +1454,35 @@ function TrackingView({
 
   // Live ETA countdown simulation
   useEffect(() => {
-    if (!driverInfo) return;
+    if (!driverInfo || tripEnded) return;
     const interval = setInterval(() => {
-      setLiveEta(prev => Math.max(1, prev - 1));
+      setLiveEta(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setTripEnded(true);
+          return 0;
+        }
+        return prev - 1;
+      });
       setLiveDistance(prev => Math.max(0.1, prev - (prev * 0.1)));
     }, 60000); // Decrement every minute
     return () => clearInterval(interval);
-  }, [driverInfo]);
+  }, [driverInfo, tripEnded]);
+
+  // Fetch individual fare when trip ends
+  useEffect(() => {
+    if (tripEnded && driverInfo?.poolId) {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+      const token = localStorage.getItem("token") || `demo-user`;
+      fetch(`${apiUrl}/api/pools/${driverInfo.poolId}/split`, { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+           const myShare = data.shares.find((s: any) => s.riderId === token);
+           if (myShare) setAmountDue(myShare.individualFare);
+        })
+        .catch(console.error);
+    }
+  }, [tripEnded, driverInfo]);
 
   const eta = driverInfo?.etaMinutes ? Math.min(driverInfo.etaMinutes, liveEta) : liveEta;
   const driverName = driverInfo?.driver?.name || "Assigning...";
@@ -1475,6 +1500,56 @@ function TrackingView({
     localStorage.setItem("campuspool-stage", "home");
     window.location.href = "/";
   };
+
+  const handlePay = async () => {
+    setPaying(true);
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+    try {
+      const res = await fetch(`${apiUrl}/api/payments/mock-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amountDue })
+      });
+      await res.json();
+      
+      // Simulate Razorpay UI delay
+      setTimeout(() => {
+        alert("Payment Successful! Mock Razorpay flow completed.");
+        localStorage.setItem("campuspool-stage", "home");
+        window.location.href = "/";
+      }, 1500);
+    } catch (e) {
+      console.error(e);
+      setPaying(false);
+    }
+  };
+
+  if (tripEnded) {
+    return (
+      <div className="tracking-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '24px' }}>
+        <div style={{ background: '#E8F5E9', padding: '24px', borderRadius: '50%', marginBottom: '24px' }}>
+          <Check size={48} color="#22C55E" />
+        </div>
+        <h2>Trip Completed!</h2>
+        <p style={{ color: '#64748B', marginBottom: '32px' }}>Hope you had a safe journey back to {dropoff.name.split(" ")[0]}.</p>
+        
+        <div style={{ background: '#F8FAFC', padding: '24px', borderRadius: '16px', width: '100%', marginBottom: '32px', border: '1px solid #E2E8F0' }}>
+          <small style={{ color: '#64748B', fontWeight: 600 }}>YOUR SHARE</small>
+          <h1 style={{ fontSize: '48px', color: '#0F172A', margin: '8px 0' }}>₹{amountDue.toFixed(2)}</h1>
+          <p style={{ fontSize: '14px', color: '#94A3B8' }}>Calculated via Distance Split algorithm</p>
+        </div>
+
+        <button 
+          className="button"
+          onClick={handlePay}
+          disabled={paying || amountDue === 0}
+          style={{ width: '100%', padding: '16px', fontSize: '16px' }}
+        >
+          {paying ? "Processing..." : "Pay with Razorpay"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="tracking-view">
@@ -1603,12 +1678,18 @@ function TrackingView({
           )}
         </button>
       </div>
-      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', padding: '0 20px' }}>
         <button 
           onClick={handleCancel}
           style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}
         >
           Cancel Ride
+        </button>
+        <button 
+          onClick={() => setTripEnded(true)}
+          style={{ background: 'transparent', border: 'none', color: '#3B82F6', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}
+        >
+          Dev: End Trip
         </button>
       </div>
       {sosSent && (
