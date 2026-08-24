@@ -1460,7 +1460,6 @@ function TrackingView({
     const token = localStorage.getItem("token") || `demo-user`;
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
     
-    // Fetch active pool first
     fetch(`${apiUrl}/api/pools/active/${token}`)
       .then((res) => res.json())
       .then((data) => {
@@ -1468,14 +1467,10 @@ function TrackingView({
         if (data.pool && data.pool.driverDetails) {
           const parsedDriver = typeof data.pool.driverDetails === 'string' ? JSON.parse(data.pool.driverDetails) : data.pool.driverDetails;
           setDriverInfo({ driver: parsedDriver, etaMinutes: time, distanceKm: distance, poolId: data.pool.id });
-        } else if (data.pool) {
-          // Dispatch if no driver details
-          handleDispatch(data.pool.id);
         }
       })
       .catch((err) => {
         console.error(err);
-        setDispatchFailed(true);
       });
   }, [pickup, dropoff, time, distance]);
 
@@ -1798,12 +1793,12 @@ function TrackingView({
         >
           Cancel Ride
         </button>
-        {(!driverInfo || dispatchFailed) && poolData && poolData.pool && (
+        {!driverInfo && (
           <button 
-            onClick={() => handleDispatch(poolData.pool.id)}
+            onClick={() => handleDispatch(poolData?.pool?.id || "demo-pool-id")}
             style={{ background: 'transparent', border: 'none', color: '#10B981', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'center' }}
           >
-            Retry Assign Driver
+            Assign Driver
           </button>
         )}
         <button 
