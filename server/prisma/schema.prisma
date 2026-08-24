@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -31,18 +31,18 @@ model RideRequest {
   dropoffLng           Float
   flexTimeStart        DateTime
   flexTimeEnd          DateTime
-  vehicleType          VehicleType
-  status               RideRequestStatus @default(PENDING)
+  vehicleType          String
+  status               String @default("PENDING")
   createdAt            DateTime        @default(now())
 }
 
 model Pool {
   id                 String         @id @default(uuid())
-  vehicleType        VehicleType
+  vehicleType        String
   maxCapacity        Int
-  status             PoolStatus      @default(OPEN)
+  status             String      @default("OPEN")
   totalEstimatedFare Float           @default(0)
-  driverDetails      Json?
+  driverDetails      String?
   shareTrackingUrl    String?
   createdAt          DateTime       @default(now())
   members            PoolMember[]
@@ -57,7 +57,7 @@ model PoolMember {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   stopSequence  Int
   individualFare Float         @default(0)
-  paymentStatus PaymentStatus  @default(PENDING)
+  paymentStatus String  @default("PENDING")
   paymentId     String?
   createdAt     DateTime       @default(now())
 
@@ -74,28 +74,3 @@ model ChatMessage {
   timestamp DateTime @default(now())
 }
 
-enum VehicleType {
-  AUTO_3
-  CAB_4
-}
-
-enum RideRequestStatus {
-  PENDING
-  MATCHED
-  COMPLETED
-  CANCELLED
-}
-
-enum PoolStatus {
-  OPEN
-  FULL
-  PAYMENT_PENDING
-  DISPATCHED
-  IN_PROGRESS
-  COMPLETED
-}
-
-enum PaymentStatus {
-  PENDING
-  PAID
-}
