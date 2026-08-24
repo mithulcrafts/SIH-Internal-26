@@ -1153,6 +1153,7 @@ function PoolView({
   const [activePool, setActivePool] = useState<any>(null);
   const [realMembers, setRealMembers] = useState<any[]>([]);
   const [splitModalOpen, setSplitModalOpen] = useState(false);
+  const [noActiveRides, setNoActiveRides] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token") || `demo-user`;
@@ -1165,8 +1166,7 @@ function PoolView({
           if (data.pool) setActivePool(data.pool);
           if (data.members) setRealMembers(data.members);
           if (data.error === "No active pool found") {
-            localStorage.setItem("campuspool-stage", "home");
-            window.location.href = "/";
+            setNoActiveRides(true);
           }
         })
         .catch(console.error);
@@ -1193,6 +1193,21 @@ function PoolView({
 
   const myMember = realMembers.find(m => m.userId === (localStorage.getItem("token") || `demo-user`));
   const estimatedShare = myMember?.individualFare > 0 ? myMember.individualFare : fare;
+
+  if (noActiveRides) {
+    return (
+      <div className="pool-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '60vh', textAlign: 'center', padding: '24px' }}>
+        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>No active rides</h2>
+        <p style={{ color: '#64748B', marginBottom: '32px' }}>You aren't currently part of any active CampusPool ride.</p>
+        <button className="primary-button" onClick={() => {
+          localStorage.setItem("campuspool-stage", "home");
+          window.location.href = "/";
+        }}>
+          Book a new ride
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="pool-view">
