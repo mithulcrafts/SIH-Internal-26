@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(uuid())
+  email            String         @unique
+  name             String
+  rollNumber       String?
+  emergencyContact String?
+  createdAt        DateTime       @default(now())
+  rideRequests     RideRequest[]
+  poolMembers      PoolMember[]
+  chatMessages     ChatMessage[]
+}
+
+model RideRequest {
+  id                   String          @id @default(uuid())
+  userId               String
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pickupLocationName   String
+  dropoffLocationName String
+  pickupLat            Float
+  pickupLng            Float
+  dropoffLat           Float
+  dropoffLng           Float
+  flexTimeStart        DateTime
+  flexTimeEnd          DateTime
+  vehicleType          VehicleType
+  status               RideRequestStatus @default(PENDING)
+  createdAt            DateTime        @default(now())
+}
+
+model Pool {
+  id                 String         @id @default(uuid())
+  vehicleType        VehicleType
+  maxCapacity        Int
+  status             PoolStatus      @default(OPEN)
+  totalEstimatedFare Float           @default(0)
+  driverDetails      Json?
+  shareTrackingUrl    String?
+  createdAt          DateTime       @default(now())
+  members            PoolMember[]
+  chatMessages       ChatMessage[]
+}
+
+model PoolMember {
+  id            String         @id @default(uuid())
+  poolId        String
+  pool          Pool           @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stopSequence  Int
+  individualFare Float         @default(0)
+  paymentStatus PaymentStatus  @default(PENDING)
+  paymentId     String?
+  createdAt     DateTime       @default(now())
+
+  @@unique([poolId, stopSequence])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  poolId    String
+  pool      Pool     @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text       String
+  timestamp DateTime @default(now())
+}
+
+enum VehicleType {
+  AUTO_3
+  CAB_4
+}
+
+enum RideRequestStatus {
+  PENDING
+  MATCHED
+  COMPLETED
+  CANCELLED
+}
+
+enum PoolStatus {
+  OPEN
+  FULL
+  PAYMENT_PENDING
+  DISPATCHED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
