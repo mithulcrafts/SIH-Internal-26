@@ -287,8 +287,18 @@ function App() {
       <main className="main-content">
         {stage === "home" && (
           <HomeView
-            onRequest={(dest?: string) => {
-              if (dest) setDestinationQuery(dest);
+            onRequest={async (dest?: string) => {
+              if (dest) {
+                const found = destinations.find(d => d.name.toLowerCase().includes(dest.toLowerCase()));
+                if (found) {
+                  setDropoff(found);
+                } else {
+                  const results = await searchPlaces(dest);
+                  if (results && results.length > 0) {
+                    setDropoff(results[0]);
+                  }
+                }
+              }
               setStage("request");
             }}
             onTracking={() => setStage("tracking")}
