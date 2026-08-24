@@ -1079,17 +1079,14 @@ function PoolView({
   const poolIdPrefix = activePool?.id
     ? activePool.id.replace(/-/g, "").substring(0, 4).toUpperCase()
     : "4821";
-  const displayMembers =
-    realMembers.length > 0
-      ? realMembers.map((m) => ({
-          name: m.user?.name || "Rider",
-          initials: (m.user?.name || "Rider").substring(0, 2).toUpperCase(),
-          color: m.userId === localStorage.getItem("token") ? "navy" : "green",
-          paid: m.paymentStatus === "PAID",
-          stop: m.stopSequence,
-          userId: m.userId,
-        }))
-      : members;
+  const displayMembers = realMembers.map((m) => ({
+    name: m.user?.name || "Rider",
+    initials: (m.user?.name || "Rider").substring(0, 2).toUpperCase(),
+    color: m.userId === localStorage.getItem("token") ? "navy" : "green",
+    paid: m.paymentStatus === "PAID",
+    stop: m.stopSequence,
+    userId: m.userId,
+  }));
 
   return (
     <div className="pool-view">
