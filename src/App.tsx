@@ -1600,9 +1600,19 @@ function TrackingView({
           className="button"
           onClick={handlePay}
           disabled={paying || amountDue === 0}
-          style={{ width: '100%', padding: '16px', fontSize: '16px' }}
+          style={{ width: '100%', padding: '16px', fontSize: '16px', marginBottom: '12px' }}
         >
           {paying ? "Processing..." : "Pay with Razorpay"}
+        </button>
+
+        <button 
+          onClick={() => {
+            localStorage.setItem("campuspool-stage", "home");
+            window.location.href = "/";
+          }}
+          style={{ background: 'transparent', border: 'none', color: '#64748B', fontWeight: 600, cursor: 'pointer', fontSize: '14px', width: '100%', padding: '12px' }}
+        >
+          Return to Home
         </button>
       </div>
     );
@@ -1761,7 +1771,7 @@ function TrackingView({
       </div>
       <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', padding: '0 20px', gap: '8px' }}>
         <button 
-          onClick={handleCancel}
+          onClick={onBack}
           style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'left' }}
         >
           Cancel Ride
