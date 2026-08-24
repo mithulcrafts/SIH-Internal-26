@@ -1525,10 +1525,14 @@ function TrackingView({
     if (tripEnded && pId) {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
       const token = localStorage.getItem("token") || `demo-user`;
+      const actualFare = (poolData?.pool?.vehicleType === 'AUTO_3' || poolData?.pool?.vehicleType !== 'CAB_4') ? 68 : 92;
+      const distKm = parseFloat(distance) || liveDistance;
+      const perKmRate = 12; // ₹12 per km
+      const computedFare = Math.round(distKm * perKmRate + actualFare);
       fetch(`${apiUrl}/api/pools/${pId}/split`, { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: token })
+        body: JSON.stringify({ userId: token, totalFare: computedFare, distanceKm: distKm })
       })
         .then(res => res.json())
         .then(data => {
@@ -1553,6 +1557,12 @@ function TrackingView({
     .join("");
 
   const handleCancel = () => {
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+    const token = localStorage.getItem("token") || `demo-user`;
+    // Cancel ride request on backend
+    fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error);
+    // Cancel pool membership on backend
+    fetch(`${apiUrl}/api/pools/active/${token}`, { method: 'DELETE' }).catch(console.error);
     localStorage.setItem("campuspool-stage", "home");
     window.location.href = "/";
   };
@@ -1568,6 +1578,11 @@ function TrackingView({
       });
       await res.json();
       
+      // Mark ride as complete on backend
+      const token = localStorage.getItem("token") || `demo-user`;
+      fetch(`${apiUrl}/api/pools/active/${token}/complete`, { method: 'POST' }).catch(console.error);
+      fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error);
+
       // Simulate Razorpay UI delay
       setTimeout(() => {
         alert("Payment Successful! Mock Razorpay flow completed.");
@@ -1628,6 +1643,11 @@ function TrackingView({
 
         <button 
           onClick={() => {
+            // Mark ride as complete on backend
+            const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+            const token = localStorage.getItem("token") || `demo-user`;
+            fetch(`${apiUrl}/api/pools/active/${token}/complete`, { method: 'POST' }).catch(console.error);
+            fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error);
             localStorage.setItem("campuspool-stage", "home");
             window.location.href = "/";
           }}
@@ -1792,7 +1812,7 @@ function TrackingView({
       </div>
       <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', padding: '0 20px', gap: '8px' }}>
         <button 
-          onClick={onBack}
+          onClick={handleCancel}
           style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'left' }}
         >
           Cancel Ride

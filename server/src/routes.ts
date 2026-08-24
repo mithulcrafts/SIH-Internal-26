@@ -236,7 +236,7 @@ router.get('/pools/waiting', async (req: Request, res: Response) => {
 router.get('/pools/active/:userId', async (req: Request, res: Response) => {
   if (prisma) {
     const member = await prisma.poolMember.findFirst({
-      where: { userId: req.params.userId },
+      where: { userId: req.params.userId, pool: { status: { in: ['OPEN', 'DISPATCHED'] } } },
       orderBy: { createdAt: 'desc' },
       include: { pool: true, user: true }
     })
@@ -249,6 +249,46 @@ router.get('/pools/active/:userId', async (req: Request, res: Response) => {
     return res.json({ pool: member.pool, members: allMembers })
   }
   return res.status(404).json({ error: 'Mock fallback not implemented for active pools' })
+})
+
+router.delete('/pools/active/:userId', async (req: Request, res: Response) => {
+  const userId = req.params.userId;
+  if (prisma) {
+    // Cancel any pending ride requests
+    await prisma.rideRequest.updateMany({
+      where: { userId, status: { in: ['PENDING', 'MATCHED'] } },
+      data: { status: 'CANCELLED' }
+    });
+    // Remove from pool members and mark pools as cancelled if empty
+    const memberships = await prisma.poolMember.findMany({ where: { userId } });
+    for (const m of memberships) {
+      await prisma.poolMember.delete({ where: { id: m.id } });
+      const remaining = await prisma.poolMember.count({ where: { poolId: m.poolId } });
+      if (remaining === 0) {
+        await prisma.pool.update({ where: { id: m.poolId }, data: { status: 'CANCELLED' } });
+      }
+    }
+    return res.json({ success: true });
+  }
+  return res.json({ success: true });
+})
+
+router.post('/pools/active/:userId/complete', async (req: Request, res: Response) => {
+  const userId = req.params.userId;
+  if (prisma) {
+    await prisma.rideRequest.updateMany({
+      where: { userId, status: { in: ['PENDING', 'MATCHED'] } },
+      data: { status: 'COMPLETED' }
+    });
+    const memberships = await prisma.poolMember.findMany({ where: { userId }, include: { pool: true } });
+    for (const m of memberships) {
+      if (m.pool.status === 'DISPATCHED' || m.pool.status === 'OPEN') {
+        await prisma.pool.update({ where: { id: m.poolId }, data: { status: 'COMPLETED' } });
+      }
+    }
+    return res.json({ success: true });
+  }
+  return res.json({ success: true });
 })
 
 router.post('/pools/match', async (req: Request, res: Response) => {
@@ -280,14 +320,16 @@ router.post('/pools/:id/split', async (req: Request, res: Response) => {
     const members = await prisma.poolMember.findMany({ where: { poolId: req.params.id }, orderBy: { stopSequence: 'asc' } })
     
     if (members.length === 0 && bodyString(req.body.userId)) {
+      const distKm = bodyNumber(req.body.distanceKm) || 12.5;
+      const computedFare = bodyNumber(req.body.totalFare) || totalFare;
       return res.json({
         shares: [{
           riderId: bodyString(req.body.userId),
-          distanceKm: 12.5,
+          distanceKm: distKm,
           splitPercentage: 100,
-          individualFare: totalFare
+          individualFare: computedFare
         }],
-        totalFare
+        totalFare: computedFare
       })
     }
 
