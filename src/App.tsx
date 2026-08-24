@@ -1139,11 +1139,11 @@ function PoolView({
           {vehicle === "CAB_4" ? 4 : 3} seats
         </span>
         <span>
-          <Clock3 size={17} /> 25 min
+          <Clock3 size={17} /> {time} min
         </span>
         <span>
           <Navigation size={17} />{" "}
-          {dropoff.name.includes("Airport") ? "12.8 km" : "6.4 km"}
+          {distance} km
         </span>
       </div>
       <section className="member-card">
