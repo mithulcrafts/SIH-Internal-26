@@ -192,6 +192,36 @@ router.get('/pools/stats', async (req: Request, res: Response) => {
   return res.json({ activeCount: mockStore.pools.filter(p => p.status === 'OPEN').length });
 });
 
+router.get('/pools/waiting', async (req: Request, res: Response) => {
+  if (prisma) {
+    const pendingRequests = await prisma.rideRequest.findMany({
+      where: { status: 'PENDING' },
+      include: { user: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    const waiting = pendingRequests.map(r => ({
+      userId: r.userId,
+      name: r.user?.name || "Rider",
+      destination: r.dropoffLocationName || "Unknown Location",
+      vehicle: r.vehicleType
+    }));
+    return res.json({ waiting });
+  }
+  
+  const waiting = mockStore.rideRequests
+    .filter(r => r.status === 'PENDING')
+    .map(r => {
+      const u = mockStore.users.find(u => u.id === r.userId);
+      return {
+        userId: r.userId,
+        name: u?.name || "Rider",
+        destination: r.dropoffLocationName || "Unknown Location",
+        vehicle: r.vehicleType
+      };
+    });
+  return res.json({ waiting });
+});
+
 router.get('/pools/active/:userId', async (req: Request, res: Response) => {
   if (prisma) {
     const member = await prisma.poolMember.findFirst({

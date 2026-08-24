@@ -548,6 +548,7 @@ function HomeView({
   const firstName = (user.name || "Student").split(" ")[0];
   const [weather, setWeather] = useState<{ temp: number; desc: string } | null>(null);
   const [activePoolsCount, setActivePoolsCount] = useState<number>(0);
+  const [waitingQueue, setWaitingQueue] = useState<{name: string, destination: string, vehicle: string}[]>([]);
 
   useEffect(() => {
     fetch("https://api.open-meteo.com/v1/forecast?latitude=26.2183&longitude=78.1828&current_weather=true")
@@ -565,6 +566,11 @@ function HomeView({
     fetch(`${apiUrl}/api/pools/stats`)
       .then(res => res.json())
       .then(data => setActivePoolsCount(data.activeCount || 0))
+      .catch(console.error);
+
+    fetch(`${apiUrl}/api/pools/waiting`)
+      .then(res => res.json())
+      .then(data => setWaitingQueue(data.waiting || []))
       .catch(console.error);
   }, []);
 
@@ -661,6 +667,32 @@ function HomeView({
           <ChevronRight size={16} />
         </div>
       </section>
+      {waitingQueue.length > 0 && (
+        <section className="explore-section">
+          <div className="section-heading">
+            <h3>Waiting for a ride</h3>
+            <span>Live demand</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+            {waitingQueue.map((w, i) => (
+              <div key={i} style={{ padding: '12px 16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span className="avatar" style={{ width: '36px', height: '36px', fontSize: '13px' }}>
+                  {w.name.substring(0, 2).toUpperCase()}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ fontSize: '14px', display: 'block', color: '#0F172A', marginBottom: '2px' }}>{w.name}</strong>
+                  <small style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <MapPin size={12} /> Going to {w.destination}
+                  </small>
+                </div>
+                <div className="matched-chip" style={{ background: '#FFF', border: '1px solid #E2E8F0', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                   {w.vehicle === 'CAB_4' ? 'Cab' : 'Auto'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="section-heading">
         <h3>How it works</h3>
         <span>3 simple steps</span>
