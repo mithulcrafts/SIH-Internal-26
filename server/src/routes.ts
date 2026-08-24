@@ -185,6 +185,16 @@ router.post('/rides/request', async (req: Request, res: Response) => {
   return res.status(201).json(ride)
 })
 
+router.delete('/rides/request/:userId', async (req: Request, res: Response) => {
+  const userId = req.params.userId;
+  if (prisma) {
+    await prisma.rideRequest.deleteMany({ where: { userId, status: 'PENDING' } });
+    return res.json({ success: true });
+  }
+  mockStore.rideRequests = mockStore.rideRequests.filter(r => !(r.userId === userId && r.status === 'PENDING'));
+  return res.json({ success: true });
+})
+
 router.get('/pools/stats', async (req: Request, res: Response) => {
   if (prisma) {
     const activeCount = await prisma.pool.count({ where: { status: 'OPEN' } });

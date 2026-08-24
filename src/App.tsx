@@ -557,7 +557,15 @@ function HomeView({
   const firstName = (user.name || "Student").split(" ")[0];
   const [weather, setWeather] = useState<{ temp: number; desc: string } | null>(null);
   const [activePoolsCount, setActivePoolsCount] = useState<number>(0);
-  const [waitingQueue, setWaitingQueue] = useState<{name: string, destination: string, vehicle: string}[]>([]);
+  const [waitingQueue, setWaitingQueue] = useState<{userId?: string, name: string, destination: string, vehicle: string}[]>([]);
+
+  const fetchWaitingQueue = () => {
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+    fetch(`${apiUrl}/api/pools/waiting`)
+      .then(res => res.json())
+      .then(data => setWaitingQueue(data.waiting || []))
+      .catch(console.error);
+  };
 
   useEffect(() => {
     fetch("https://api.open-meteo.com/v1/forecast?latitude=26.2183&longitude=78.1828&current_weather=true")
@@ -577,10 +585,7 @@ function HomeView({
       .then(data => setActivePoolsCount(data.activeCount || 0))
       .catch(console.error);
 
-    fetch(`${apiUrl}/api/pools/waiting`)
-      .then(res => res.json())
-      .then(data => setWaitingQueue(data.waiting || []))
-      .catch(console.error);
+    fetchWaitingQueue();
   }, []);
 
   return (
@@ -682,22 +687,39 @@ function HomeView({
         </div>
         {waitingQueue.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
-            {waitingQueue.map((w, i) => (
-              <div key={i} style={{ padding: '12px 16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span className="avatar" style={{ width: '36px', height: '36px', fontSize: '13px' }}>
-                  {w.name.substring(0, 2).toUpperCase()}
-                </span>
-                <div style={{ flex: 1 }}>
-                  <strong style={{ fontSize: '14px', display: 'block', color: '#0F172A', marginBottom: '2px' }}>{w.name}</strong>
-                  <small style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <MapPin size={12} /> Going to {w.destination}
-                  </small>
+            {waitingQueue.map((w, i) => {
+              const isMyRide = w.userId === (localStorage.getItem("token") || 'demo-user');
+              return (
+                <div key={i} style={{ padding: '12px 16px', background: isMyRide ? '#EFF6FF' : '#F8FAFC', borderRadius: '12px', border: isMyRide ? '1px solid #BFDBFE' : '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span className="avatar" style={{ width: '36px', height: '36px', fontSize: '13px', background: isMyRide ? '#3B82F6' : undefined, color: isMyRide ? 'white' : undefined }}>
+                    {w.name.substring(0, 2).toUpperCase()}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ fontSize: '14px', display: 'block', color: '#0F172A', marginBottom: '2px' }}>{w.name} {isMyRide && "(You)"}</strong>
+                    <small style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <MapPin size={12} /> Going to {w.destination}
+                    </small>
+                  </div>
+                  {isMyRide ? (
+                    <button 
+                      onClick={() => {
+                        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+                        fetch(`${apiUrl}/api/rides/request/${w.userId}`, { method: 'DELETE' })
+                          .then(() => fetchWaitingQueue())
+                          .catch(console.error);
+                      }}
+                      style={{ background: '#EF4444', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                  ) : (
+                    <div className="matched-chip" style={{ background: '#FFF', border: '1px solid #E2E8F0', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                      {w.vehicle === 'CAB_4' ? 'Cab' : 'Auto'}
+                    </div>
+                  )}
                 </div>
-                <div className="matched-chip" style={{ background: '#FFF', border: '1px solid #E2E8F0', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                   {w.vehicle === 'CAB_4' ? 'Cab' : 'Auto'}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '12px', border: '1px dashed #CBD5E1', textAlign: 'center', marginTop: '16px', color: '#64748B', fontSize: '14px' }}>
