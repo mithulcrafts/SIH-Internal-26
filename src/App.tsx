@@ -1695,6 +1695,30 @@ function TrackingView({
           <span>{eta + Math.round(parseFloat(displayDistance as string) * 3)} min left</span>
         </div>
       </div>
+
+      {poolData?.pool?.members && (
+        <section className="members-list" style={{ marginTop: '0', padding: '0 20px', marginBottom: '16px' }}>
+          <div className="members-header" style={{ marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '14px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Co-riders ({poolData.pool.members.length})</h3>
+          </div>
+          {poolData.pool.members.map((member: any, i: number) => {
+            const isMe = member.userId === (localStorage.getItem("token") || 'demo-user');
+            const initials = isMe ? "Y" : member.userId.split("_")[0][0].toUpperCase();
+            const name = isMe ? "You" : member.userId.split("_")[0].toUpperCase() + '...' + member.userId.slice(-3);
+            return (
+              <div className="member-row" key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: i === poolData.pool.members.length - 1 ? 'none' : '1px solid #F1F5F9' }}>
+                <span className={`member-avatar color-${(i % 5) + 1}`} style={{ width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, color: 'white' }}>
+                  {initials}
+                </span>
+                <div>
+                  <strong style={{ fontSize: '14px', color: '#0F172A' }}>{name}</strong>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
       <div className="tracking-actions">
         <button
           className="share-button"
