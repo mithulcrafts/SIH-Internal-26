@@ -1306,18 +1306,13 @@ function PoolView({
           <span style={{ width: paid ? "100%" : "66%" }} />
         </div>
         <div className="payment-foot">
-          <span>{paid ? "All members paid" : "Waiting for others to pay"}</span>
+          <span>Your share will be collected after the trip</span>
           <span>Fare may vary ±₹8</span>
         </div>
-        {!paid ? (
-          <button className="primary-button wide" onClick={() => setPaid(true)}>
-            <CreditCard size={17} /> Pay with Razorpay · ₹{estimatedShare}
-          </button>
-        ) : (
-          <button className="success-button wide" onClick={onTrack}>
-            <Check size={17} /> All paid · View live ride
-          </button>
-        )}
+        <button className="primary-button wide" style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={onTrack}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" opacity="0"/></svg>
+          Book Uber
+        </button>
       </section>
       {chatOpen && (
         <ChatDrawer
@@ -1430,7 +1425,8 @@ function TrackingView({
       .then((res) => res.json())
       .then((data) => {
         if (data.pool && data.pool.driverDetails) {
-          setDriverInfo({ driver: data.pool.driverDetails, etaMinutes: time, distanceKm: distance });
+          const parsedDriver = typeof data.pool.driverDetails === 'string' ? JSON.parse(data.pool.driverDetails) : data.pool.driverDetails;
+          setDriverInfo({ driver: parsedDriver, etaMinutes: time, distanceKm: distance, poolId: data.pool.id });
         } else if (data.pool) {
           // Dispatch if no driver details
           fetch(`${apiUrl}/api/uber/mock-dispatch`, {
@@ -1558,12 +1554,12 @@ function TrackingView({
       </button>
       <div className="tracking-head">
         <div>
-          <p className="eyebrow success-label">LIVE RIDE · ON THE WAY</p>
+          <p className="eyebrow success-label" style={{ color: '#000', backgroundColor: '#F3F4F6', display: 'inline-block', padding: '4px 8px', borderRadius: '4px' }}>LIVE UBER RIDE · ON THE WAY</p>
           <h2>Heading to {dropoff.name.split(" ")[0]}</h2>
-          <p>Your driver is {eta} minutes away.</p>
+          <p>Your Uber driver is {eta} minutes away.</p>
         </div>
         <span className="live-dot">
-          <span /> LIVE
+          <span className="ping" />
         </span>
       </div>
       <div
@@ -1624,9 +1620,9 @@ function TrackingView({
         <div className="driver-info">
           <strong>{driverName}</strong>
           <span>
-            <Star size={14} fill="#D99B26" /> {driverRating} · {driverVehicle}
+            <Star size={14} fill="#D99B26" /> {driverRating} · {driverVehicle.includes('Auto') || driverVehicle === 'AUTO_3' ? 'Uber Auto' : 'Uber Go'}
           </span>
-          <small>{driverPlate}</small>
+          <small>{driverPlate} · {driverVehicle}</small>
         </div>
         <a
           href={`tel:${driverPhone}`}

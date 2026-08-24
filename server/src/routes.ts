@@ -305,7 +305,7 @@ router.post('/uber/mock-dispatch', async (req: Request, res: Response) => {
   })
   
   if (prisma && bodyString(req.body.poolId)) {
-    await prisma.pool.update({ where: { id: bodyString(req.body.poolId) }, data: { status: 'DISPATCHED', driverDetails: trip.driver as import('@prisma/client').Prisma.InputJsonValue, shareTrackingUrl: trip.trackingUrl } })
+    await prisma.pool.update({ where: { id: bodyString(req.body.poolId) }, data: { status: 'DISPATCHED', driverDetails: JSON.stringify(trip.driver), shareTrackingUrl: trip.trackingUrl } })
   }
   return res.json(trip)
 })
