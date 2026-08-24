@@ -64,25 +64,31 @@ router.post('/auth/send-otp', (req: Request, res: Response) => {
 })
 
 router.post('/auth/verify-otp', async (req: Request, res: Response) => {
-  const email = bodyString(req.body.email).toLowerCase()
-  const otp = bodyString(req.body.otp)
-  if (!validIiitmEmail(email) || otp !== '123456') return res.status(401).json({ error: 'Invalid verification code.' })
+  try {
+    const email = bodyString(req.body.email).toLowerCase()
+    const otp = bodyString(req.body.otp)
+    
+    if (!validIiitmEmail(email) || otp !== '123456') return res.status(401).json({ error: 'Invalid verification code.' })
 
-  if (prisma) {
-    const user = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: { email, name: email.split('@')[0] },
-    })
+    if (prisma) {
+      const user = await prisma.user.upsert({
+        where: { email },
+        update: {},
+        create: { email, name: email.split('@')[0] },
+      })
+      return res.json({ token: createToken(user.id), user })
+    }
+
+    let user = mockStore.users.find((candidate) => candidate.email === email)
+    if (!user) {
+      user = { id: mockStore.nextId(), email, name: email.split('@')[0], rollNumber: null, emergencyContact: null, createdAt: new Date() }
+      mockStore.users.push(user)
+    }
     return res.json({ token: createToken(user.id), user })
+  } catch (error) {
+    console.error("Auth error:", error)
+    return res.status(500).json({ error: "Internal server error during auth" })
   }
-
-  let user = mockStore.users.find((candidate) => candidate.email === email)
-  if (!user) {
-    user = { id: mockStore.nextId(), email, name: email.split('@')[0], rollNumber: null, emergencyContact: null, createdAt: new Date() }
-    mockStore.users.push(user)
-  }
-  return res.json({ token: createToken(user.id), user })
 })
 
 router.post('/rides/request', async (req: Request, res: Response) => {
