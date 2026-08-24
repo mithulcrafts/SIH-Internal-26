@@ -26,7 +26,7 @@ export async function matchPendingRides(vehicleType: GroupingVehicleType, requir
     const clusters = clusterRideRequests(pending.map(toRideCandidate), vehicleType)
     
     for (const cluster of clusters) {
-      if (requireMultiple && cluster.rides.length < 2) continue
+      // Create the pool even if size is 1, as per user's strict real-data requirement
       const pool = await prisma.pool.create({ data: { vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType) } })
       await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: pool.id, userId: ride.userId, stopSequence: index + 1 })) })
       await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })
@@ -106,14 +106,33 @@ router.post('/rides/request', async (req: Request, res: Response) => {
       create: { id: payload.userId, email: `${payload.userId}@iiitm.ac.in`, name: 'CampusPool User' }
     })
     const ride = await prisma.rideRequest.create({ data: payload })
-    await matchPendingRides(payload.vehicleType, true)
-    return res.status(201).json(ride)
+    const results = await matchPendingRides(payload.vehicleType, true)
+    const matchedPool = results.find(r => r.pool && (r.pool as any).id)
+    return res.status(201).json({ ...ride, poolId: matchedPool ? (matchedPool.pool as any).id : null })
   }
 
   const ride: MockRideRequest = { ...payload, id: mockStore.nextId(), status: 'PENDING', createdAt: new Date() }
   mockStore.rideRequests.push(ride)
   await matchPendingRides(payload.vehicleType, true)
   return res.status(201).json(ride)
+})
+
+router.get('/pools/active/:userId', async (req: Request, res: Response) => {
+  if (prisma) {
+    const member = await prisma.poolMember.findFirst({
+      where: { userId: req.params.userId },
+      orderBy: { createdAt: 'desc' },
+      include: { pool: true, user: true }
+    })
+    if (!member) return res.status(404).json({ error: 'No active pool found' })
+    const allMembers = await prisma.poolMember.findMany({
+      where: { poolId: member.poolId },
+      orderBy: { stopSequence: 'asc' },
+      include: { user: true }
+    })
+    return res.json({ pool: member.pool, members: allMembers })
+  }
+  return res.status(404).json({ error: 'Mock fallback not implemented for active pools' })
 })
 
 router.post('/pools/match', async (req: Request, res: Response) => {
