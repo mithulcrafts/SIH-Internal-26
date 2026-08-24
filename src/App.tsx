@@ -287,7 +287,10 @@ function App() {
       <main className="main-content">
         {stage === "home" && (
           <HomeView
-            onRequest={() => setStage("request")}
+            onRequest={(dest?: string) => {
+              if (dest) setDestinationQuery(dest);
+              setStage("request");
+            }}
             onTracking={() => setStage("tracking")}
           />
         )}
@@ -528,11 +531,33 @@ function HomeView({
   onRequest,
   onTracking,
 }: {
-  onRequest: () => void;
+  onRequest: (dest?: string) => void;
   onTracking: () => void;
 }) {
   const user = getUser();
   const firstName = (user.name || "Student").split(" ")[0];
+  const [weather, setWeather] = useState<{ temp: number; desc: string } | null>(null);
+  const [activePoolsCount, setActivePoolsCount] = useState<number>(0);
+
+  useEffect(() => {
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=26.2183&longitude=78.1828&current_weather=true")
+      .then(res => res.json())
+      .then(data => {
+         if (data?.current_weather) {
+            setWeather({ 
+              temp: Math.round(data.current_weather.temperature), 
+              desc: data.current_weather.weathercode === 0 ? 'Clear skies' : 'Cloudy' 
+            });
+         }
+      }).catch(console.error);
+
+    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+    fetch(`${apiUrl}/api/pools/stats`)
+      .then(res => res.json())
+      .then(data => setActivePoolsCount(data.activeCount || 0))
+      .catch(console.error);
+  }, []);
+
   return (
     <div className="home-view">
       <section className="welcome">
@@ -545,11 +570,11 @@ function HomeView({
           </h2>
         </div>
         <div className="weather-card">
-          <span>28°</span>
+          <span>{weather ? `${weather.temp}°` : '...'}</span>
           <small>
             Gwalior
             <br />
-            Clear skies
+            {weather ? weather.desc : 'Loading...'}
           </small>
         </div>
       </section>
@@ -562,7 +587,7 @@ function HomeView({
           <h3>Pool your next ride</h3>
           <p>Split the fare with friends and reach together.</p>
         </div>
-        <button className="circle-action" onClick={onRequest}>
+        <button className="circle-action" onClick={() => onRequest()}>
           <ChevronRight size={20} />
         </button>
       </section>
@@ -571,7 +596,7 @@ function HomeView({
         <span>Save up to ₹120 / ride</span>
       </div>
       <div className="quick-actions">
-        <button onClick={onRequest}>
+        <button onClick={() => onRequest()}>
           <span className="quick-icon gold">
             <LocateFixed size={19} />
           </span>
@@ -592,27 +617,27 @@ function HomeView({
           <span>Search destinations</span>
         </div>
         <div className="hub-grid">
-          <button>
+          <button onClick={() => onRequest("Gwalior Railway Station")}>
             <MapPin size={16} />
             <span>Gwalior Railway Station</span>
             <small>Weekend trains</small>
           </button>
-          <button>
+          <button onClick={() => onRequest("DD Mall")}>
             <MapPin size={16} />
             <span>DD Mall · City Center</span>
             <small>Food & shopping</small>
           </button>
-          <button>
+          <button onClick={() => onRequest("Maharaj Bada")}>
             <MapPin size={16} />
             <span>Maharaj Bada</span>
             <small>Old city</small>
           </button>
-          <button>
+          <button onClick={() => onRequest("Airport")}>
             <MapPin size={16} />
             <span>Airport</span>
             <small>12.8 km away</small>
           </button>
-          <button>
+          <button onClick={() => onRequest("MITS / JIET")}>
             <MapPin size={16} />
             <span>MITS / JIET</span>
             <small>Campus routes</small>
@@ -622,7 +647,7 @@ function HomeView({
           <span className="live-dot">
             <span /> LIVE
           </span>
-          <strong>6 active pools leaving in the next 2 hours</strong>
+          <strong>{activePoolsCount} active {activePoolsCount === 1 ? 'pool' : 'pools'} right now</strong>
           <ChevronRight size={16} />
         </div>
       </section>

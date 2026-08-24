@@ -164,6 +164,14 @@ router.post('/rides/request', async (req: Request, res: Response) => {
   return res.status(201).json(ride)
 })
 
+router.get('/pools/stats', async (req: Request, res: Response) => {
+  if (prisma) {
+    const activeCount = await prisma.pool.count({ where: { status: 'OPEN' } });
+    return res.json({ activeCount });
+  }
+  return res.json({ activeCount: mockStore.pools.filter(p => p.status === 'OPEN').length });
+});
+
 router.get('/pools/active/:userId', async (req: Request, res: Response) => {
   if (prisma) {
     const member = await prisma.poolMember.findFirst({
