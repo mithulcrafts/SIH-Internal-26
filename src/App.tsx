@@ -1461,7 +1461,7 @@ function TrackingView({
         return res.json();
       })
       .then((dispatchData) => {
-        setDriverInfo(dispatchData);
+        setDriverInfo({ ...dispatchData, poolId: pid });
         setDispatchFailed(false);
       })
       .catch((err) => {
@@ -1489,10 +1489,11 @@ function TrackingView({
 
   // Fetch individual fare when trip ends
   useEffect(() => {
-    if (tripEnded && driverInfo?.poolId) {
+    const pId = driverInfo?.poolId || poolData?.pool?.id;
+    if (tripEnded && pId) {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
       const token = localStorage.getItem("token") || `demo-user`;
-      fetch(`${apiUrl}/api/pools/${driverInfo.poolId}/split`, { method: "POST" })
+      fetch(`${apiUrl}/api/pools/${pId}/split`, { method: "POST" })
         .then(res => res.json())
         .then(data => {
            setFareBreakdown(data);
@@ -1501,7 +1502,7 @@ function TrackingView({
         })
         .catch(console.error);
     }
-  }, [tripEnded, driverInfo]);
+  }, [tripEnded, driverInfo, poolData]);
 
   const eta = driverInfo?.etaMinutes ? Math.min(driverInfo.etaMinutes, liveEta) : liveEta;
   const driverName = driverInfo?.driver?.name || "Assigning...";
