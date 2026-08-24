@@ -75,6 +75,7 @@ export async function matchPendingRides(vehicleType: GroupingVehicleType, requir
         
         results.push({ pool: matchedIntoPool, matchedRiders: cluster.rides.length })
       } else {
+        if (requireMultiple && cluster.rides.length < 2) continue;
         const pool = await prisma.pool.create({ data: { vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType) } })
         await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: pool.id, userId: ride.userId, stopSequence: index + 1 })) })
         await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })

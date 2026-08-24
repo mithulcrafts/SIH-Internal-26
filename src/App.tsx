@@ -223,7 +223,7 @@ function App() {
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
     try {
-      await fetch(`${apiUrl}/api/rides/request`, {
+      const res = await fetch(`${apiUrl}/api/rides/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -239,6 +239,7 @@ function App() {
           vehicleType: vehicle,
         }),
       });
+      const data = await res.json();
 
       if (when === "later") {
         setToast("Ride scheduled! We will notify you when matched.");
@@ -246,7 +247,15 @@ function App() {
         setStage("home");
       } else {
         setStage("matching");
-        window.setTimeout(() => setStage("pool"), 1600);
+        window.setTimeout(() => {
+          if (data.poolId) {
+            setStage("pool");
+          } else {
+            setToast("Added to waiting queue! Waiting for others to join...");
+            window.setTimeout(() => setToast(""), 3500);
+            setStage("home");
+          }
+        }, 1600);
       }
     } catch (e) {
       console.error(e);
