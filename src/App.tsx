@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CarFront, Check, ChevronDown, ChevronRight, Clock3, Compass, CreditCard, Crosshair, Headphones, HelpCircle, LocateFixed, LockKeyhole, LogOut, MapPin, MessageCircle, Navigation, Phone, PhoneCall, Send, ShieldCheck, Sparkles, Star, Users, WalletCards, X } from 'lucide-react'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { InteractiveMap } from './components/InteractiveMap'
+import { reverseGeocode, searchPlaces } from './services/maps'
 
 type Stage = 'login' | 'home' | 'support' | 'request' | 'matching' | 'pool' | 'tracking'
 type Vehicle = 'AUTO_3' | 'CAB_4'
@@ -47,6 +49,7 @@ function App() {
   const [dropoff, setDropoff] = useState<Location>(destinations[0])
   const [vehicle, setVehicle] = useState<Vehicle>('AUTO_3')
   const [when, setWhen] = useState<'now' | 'later'>('later')
+  const [prebookTime, setPrebookTime] = useState('')
   const [destinationQuery, setDestinationQuery] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
   const [chatMessage, setChatMessage] = useState('')
@@ -92,12 +95,49 @@ function App() {
   }
 
   const requestRide = async () => {
-    const supabase = getSupabase()
-    if (supabase) {
-      await supabase.from('ride_requests').insert({ pickup_location_name: pickup.name, dropoff_location_name: dropoff.name, pickup_lat: pickup.lat, pickup_lng: pickup.lng, dropoff_lat: dropoff.lat, dropoff_lng: dropoff.lng, flex_time_start: new Date().toISOString(), flex_time_end: new Date(Date.now() + 15 * 60000).toISOString(), vehicle_type: vehicle, status: 'PENDING' })
+    if (when === 'later' && !prebookTime) {
+      setToast('Please select a valid time for pre-booking')
+      window.setTimeout(() => setToast(''), 2600)
+      return
     }
-    setStage('matching')
-    window.setTimeout(() => setStage('pool'), 1600)
+
+    const start = when === 'later' ? new Date(prebookTime) : new Date()
+    const end = new Date(start.getTime() + 15 * 60000)
+    
+    const token = localStorage.getItem('token') || `demo-${Date.now()}`
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+
+    try {
+      await fetch(`${apiUrl}/api/rides/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: token,
+          pickupLocationName: pickup.name,
+          dropoffLocationName: dropoff.name,
+          pickupLat: pickup.lat,
+          pickupLng: pickup.lng,
+          dropoffLat: dropoff.lat,
+          dropoffLng: dropoff.lng,
+          flexTimeStart: start.toISOString(),
+          flexTimeEnd: end.toISOString(),
+          vehicleType: vehicle
+        })
+      })
+      
+      if (when === 'later') {
+        setToast('Ride scheduled! We will notify you when matched.')
+        window.setTimeout(() => setToast(''), 3500)
+        setStage('home')
+      } else {
+        setStage('matching')
+        window.setTimeout(() => setStage('pool'), 1600)
+      }
+    } catch (e) {
+      console.error(e)
+      setToast('Failed to request ride')
+      window.setTimeout(() => setToast(''), 2600)
+    }
   }
 
   const sendMessage = () => {
@@ -112,7 +152,7 @@ function App() {
     <main className="main-content">
       {stage === 'home' && <HomeView onRequest={() => setStage('request')} onTracking={() => setStage('tracking')} />}
       {stage === 'support' && <SupportView />}
-      {stage === 'request' && <RequestView pickup={pickup} setPickup={setPickup} dropoff={dropoff} setDropoff={setDropoff} vehicle={vehicle} setVehicle={setVehicle} when={when} setWhen={setWhen} query={destinationQuery} setQuery={setDestinationQuery} destinations={filteredDestinations} mapPin={mapPin} setMapPin={setMapPin} onBack={() => setStage('home')} onRequest={requestRide} fare={fare} />}
+      {stage === 'request' && <RequestView pickup={pickup} setPickup={setPickup} dropoff={dropoff} setDropoff={setDropoff} vehicle={vehicle} setVehicle={setVehicle} when={when} setWhen={setWhen} prebookTime={prebookTime} setPrebookTime={setPrebookTime} query={destinationQuery} setQuery={setDestinationQuery} destinations={filteredDestinations} mapPin={mapPin} setMapPin={setMapPin} onBack={() => setStage('home')} onRequest={requestRide} fare={fare} />}
       {stage === 'matching' && <MatchingView pickup={pickup} dropoff={dropoff} />}
       {stage === 'pool' && <PoolView pickup={pickup} dropoff={dropoff} vehicle={vehicle} fare={fare} paid={paid} setPaid={setPaid} chatOpen={chatOpen} setChatOpen={setChatOpen} messages={messages} message={chatMessage} setMessage={setChatMessage} sendMessage={sendMessage} onTrack={() => setStage('tracking')} />}
       {stage === 'tracking' && <TrackingView sosSent={sosSent} onSos={() => setSosSent(true)} onBack={() => setStage('pool')} />}
@@ -141,7 +181,19 @@ function HomeView({ onRequest, onTracking }: { onRequest: () => void; onTracking
 
 function Step({ number, icon, title, text }: { number: string; icon: React.ReactNode; title: string; text: string }) { return <div className="step"><span className="step-number">{number}</span><span className="step-icon">{icon}</span><div><strong>{title}</strong><p>{text}</p></div></div> }
 
-function RequestView({ pickup, setPickup, dropoff, setDropoff, vehicle, setVehicle, when, setWhen, query, setQuery, destinations: filtered, mapPin, setMapPin, onBack, onRequest, fare }: { pickup: Location; setPickup: (value: Location) => void; dropoff: Location; setDropoff: (value: Location) => void; vehicle: Vehicle; setVehicle: (value: Vehicle) => void; when: 'now' | 'later'; setWhen: (value: 'now' | 'later') => void; query: string; setQuery: (value: string) => void; destinations: Location[]; mapPin: { x: number; y: number }; setMapPin: (value: { x: number; y: number }) => void; onBack: () => void; onRequest: () => void; fare: number }) { return <div className="request-view"><button className="back-button" onClick={onBack}>← <span>Request a ride</span></button><div className="request-head"><div><p className="eyebrow">STEP 1 OF 2</p><h2>Plan your ride</h2></div><span className="fare-estimate">From ₹{fare}</span></div><div className="segmented"><button className={when === 'later' ? 'active' : ''} onClick={() => setWhen('later')}><Clock3 size={16} /> Pre-book for later <span>Recommended</span></button><button className={when === 'now' ? 'active' : ''} onClick={() => setWhen('now')}><Navigation size={16} /> Immediate ride</button></div><section className="location-card"><div className="location-row"><span className="location-dot pickup-dot" /><div><small>Pickup from campus</small><strong>{pickup.name}</strong></div></div><div className="connector" /><div className="location-row"><span className="location-dot drop-dot" /><div className="destination-field"><small>Going to</small><input value={query || dropoff.name} onChange={(event) => setQuery(event.target.value)} onFocus={() => setQuery('')} /><Compass size={18} /></div></div></section><div className="preset-scroll">{pickupPresets.map((item) => <button key={item.name} className={pickup.name === item.name ? 'preset active' : 'preset'} onClick={() => setPickup(item)}>{item.name}</button>)}</div>{query && <div className="destination-results">{filtered.map((item) => <button key={item.name} onClick={() => { setDropoff(item); setQuery('') }}><MapPin size={16} /><span>{item.name}</span><small>{item.lat.toFixed(4)}, {item.lng.toFixed(4)}</small></button>)}</div>}<div className="map-picker"><div className="map-label"><span><Crosshair size={15} /> Tap map to pin destination</span><small>{dropoff.lat.toFixed(4)}, {dropoff.lng.toFixed(4)}</small></div><div className="map-art" onClick={(event) => { const rect = event.currentTarget.getBoundingClientRect(); const x = ((event.clientX - rect.left) / rect.width) * 100; const y = ((event.clientY - rect.top) / rect.height) * 100; setMapPin({ x, y }); setDropoff({ name: 'Custom destination', lat: +(26.19 + (100 - y) * 0.0012).toFixed(4), lng: +(78.15 + x * 0.0008).toFixed(4) }) }}><div className="map-road road-a" /><div className="map-road road-b" /><div className="map-road road-c" /><span className="map-campus">IIITM</span><span className="map-pin pickup-map" style={{ left: '27%', top: '70%' }}><MapPin size={25} fill="#1E4E8C" /></span><span className="map-pin drop-map" style={{ left: `${mapPin.x}%`, top: `${mapPin.y}%` }}><MapPin size={29} fill="#D99B26" /></span><span className="map-place station">Railway Station</span><span className="map-place mall">DD Mall</span></div></div><div className="vehicle-title"><h3>Choose your vehicle</h3><span>Capacity & fare</span></div><div className="vehicle-options"><button className={vehicle === 'AUTO_3' ? 'vehicle active' : 'vehicle'} onClick={() => setVehicle('AUTO_3')}><span className="vehicle-emoji">⌁</span><div><strong>Auto</strong><small>Up to 3 riders</small></div><b>₹{fare}</b>{vehicle === 'AUTO_3' && <Check size={17} />}</button><button className={vehicle === 'CAB_4' ? 'vehicle active' : 'vehicle'} onClick={() => setVehicle('CAB_4')}><CarFront size={23} /><div><strong>Cab</strong><small>Up to 4 riders</small></div><b>₹92</b>{vehicle === 'CAB_4' && <Check size={17} />}</button></div><button className="primary-button wide request-button" onClick={onRequest}>Find my pool <ChevronRight size={18} /></button></div> }
+function RequestView({ pickup, setPickup, dropoff, setDropoff, vehicle, setVehicle, when, setWhen, prebookTime, setPrebookTime, query, setQuery, destinations: filtered, mapPin, setMapPin, onBack, onRequest, fare }: { pickup: Location; setPickup: (value: Location) => void; dropoff: Location; setDropoff: (value: Location) => void; vehicle: Vehicle; setVehicle: (value: Vehicle) => void; when: 'now' | 'later'; setWhen: (value: 'now' | 'later') => void; prebookTime: string; setPrebookTime: (value: string) => void; query: string; setQuery: (value: string) => void; destinations: Location[]; mapPin: { x: number; y: number }; setMapPin: (value: { x: number; y: number }) => void; onBack: () => void; onRequest: () => void; fare: number }) { 
+  const [liveQuery, setLiveQuery] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
+  const [liveResults, setLiveResults] = useState(filtered)
+  useEffect(() => {
+    if (!liveQuery) { setLiveResults(filtered); return }
+    const t = setTimeout(() => {
+      searchPlaces(liveQuery).then(res => setLiveResults(res))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [liveQuery, filtered])
+  
+  return <div className="request-view"><button className="back-button" onClick={onBack}>← <span>Request a ride</span></button><div className="request-head"><div><p className="eyebrow">STEP 1 OF 2</p><h2>Plan your ride</h2></div><span className="fare-estimate">From ₹{fare}</span></div><div className="segmented"><button className={when === 'later' ? 'active' : ''} onClick={() => setWhen('later')}><Clock3 size={16} /> Pre-book for later <span>Recommended</span></button><button className={when === 'now' ? 'active' : ''} onClick={() => setWhen('now')}><Navigation size={16} /> Immediate ride</button></div>{when === 'later' && <div className="prebook-time" style={{ padding: '16px 20px', background: '#F8FAFC', borderRadius: '12px', margin: '0 20px 20px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '8px' }}><label style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>Select departure time</label><input type="datetime-local" value={prebookTime} onChange={(event) => setPrebookTime(event.target.value)} style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '15px' }} /></div>}<section className="location-card"><div className="location-row"><span className="location-dot pickup-dot" /><div><small>Pickup from campus</small><strong>{pickup.name}</strong></div></div><div className="connector" /><div className="location-row"><span className="location-dot drop-dot" /><div className="destination-field"><small>Going to</small><input value={isEditing ? liveQuery : dropoff.name} onChange={(event) => setLiveQuery(event.target.value)} onFocus={() => { setIsEditing(true); setLiveQuery('') }} onKeyDown={(event) => { if (event.key === 'Enter' && liveResults.length > 0) { setDropoff(liveResults[0]); setLiveQuery(''); setIsEditing(false); } }} onBlur={() => setTimeout(() => { if (isEditing && liveQuery && liveResults.length > 0) { setDropoff(liveResults[0]); } setIsEditing(false); }, 200)} /><Compass size={18} /></div></div></section><div className="preset-scroll">{pickupPresets.map((item) => <button key={item.name} className={pickup.name === item.name ? 'preset active' : 'preset'} onClick={() => setPickup(item)}>{item.name}</button>)}</div>{isEditing && liveQuery && <div className="destination-results">{liveResults.map((item) => <button key={item.name} onClick={() => { setDropoff(item); setLiveQuery(''); setIsEditing(false) }}><MapPin size={16} /><span>{item.name}</span><small>{item.lat.toFixed(4)}, {item.lng.toFixed(4)}</small></button>)}</div>}<div className="map-picker"><div className="map-label"><span><Crosshair size={15} /> Tap map to pin destination</span><small>{dropoff.lat.toFixed(4)}, {dropoff.lng.toFixed(4)}</small></div><div style={{ width: '100%', height: '220px', margin: '16px 0', padding: '0 20px' }}><InteractiveMap pickup={pickup} dropoff={dropoff} onMapClick={async (lat, lng) => { const name = await reverseGeocode(lat, lng); setDropoff({ name: name || 'Custom destination', lat, lng }) }} /></div></div><div className="vehicle-title"><h3>Choose your vehicle</h3><span>Capacity & fare</span></div><div className="vehicle-options"><button className={vehicle === 'AUTO_3' ? 'vehicle active' : 'vehicle'} onClick={() => setVehicle('AUTO_3')}><span className="vehicle-emoji">⌁</span><div><strong>Auto</strong><small>Up to 3 riders</small></div><b>₹{fare}</b>{vehicle === 'AUTO_3' && <Check size={17} />}</button><button className={vehicle === 'CAB_4' ? 'vehicle active' : 'vehicle'} onClick={() => setVehicle('CAB_4')}><CarFront size={23} /><div><strong>Cab</strong><small>Up to 4 riders</small></div><b>₹92</b>{vehicle === 'CAB_4' && <Check size={17} />}</button></div><button className="primary-button wide request-button" onClick={onRequest}>Find my pool <ChevronRight size={18} /></button></div> }
 
 function MatchingView({ pickup, dropoff }: { pickup: Location; dropoff: Location }) { return <div className="matching-view"><div className="matching-map"><div className="pulse pulse-one" /><div className="pulse pulse-two" /><span className="map-pin match-pickup"><MapPin size={27} fill="#1E4E8C" /></span><span className="map-pin match-drop"><MapPin size={29} fill="#D99B26" /></span><div className="route-line" /></div><div className="matching-copy"><span className="loading-ring"><Users size={23} /></span><p className="eyebrow">LOOKING AROUND CAMPUS</p><h2>Finding your<br /><em>ride crew...</em></h2><p>Matching students near {pickup.name} going towards {dropoff.name}.</p><div className="match-progress"><span /></div><small>Usually takes less than a minute</small></div></div> }
 

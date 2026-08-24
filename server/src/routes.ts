@@ -18,28 +18,39 @@ const validIiitmEmail = (email: string): boolean => /^[^@\s]+@iiitm\.ac\.in$/i.t
 const capacityFor = (vehicleType: GroupingVehicleType): number => vehicleType === 'CAB_4' ? 4 : 3
 const fareFor = (vehicleType: GroupingVehicleType): number => vehicleType === 'CAB_4' ? 276 : 204
 
-async function matchPendingRides(vehicleType: GroupingVehicleType, requireMultiple = false): Promise<{ pool: unknown; matchedRiders: number } | null> {
+export async function matchPendingRides(vehicleType: GroupingVehicleType, requireMultiple = false): Promise<Array<{ pool: unknown; matchedRiders: number }>> {
+  const results: Array<{ pool: unknown; matchedRiders: number }> = []
+
   if (prisma) {
-    const pending = await prisma.rideRequest.findMany({ where: { status: 'PENDING', vehicleType }, orderBy: { createdAt: 'asc' }, take: capacityFor(vehicleType) })
-    const cluster = clusterRideRequests(pending.map(toRideCandidate), vehicleType)[0]
-    if (!cluster || (requireMultiple && cluster.rides.length < 2)) return null
-    const pool = await prisma.pool.create({ data: { vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType) } })
-    await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: pool.id, userId: ride.userId, stopSequence: index + 1 })) })
-    await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })
-    return { pool, matchedRiders: cluster.rides.length }
+    const pending = await prisma.rideRequest.findMany({ where: { status: 'PENDING', vehicleType }, orderBy: { createdAt: 'asc' } })
+    const clusters = clusterRideRequests(pending.map(toRideCandidate), vehicleType)
+    
+    for (const cluster of clusters) {
+      if (requireMultiple && cluster.rides.length < 2) continue
+      const pool = await prisma.pool.create({ data: { vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType) } })
+      await prisma.poolMember.createMany({ data: cluster.rides.map((ride, index) => ({ poolId: pool.id, userId: ride.userId, stopSequence: index + 1 })) })
+      await prisma.rideRequest.updateMany({ where: { id: { in: cluster.rides.map((ride) => ride.id) } }, data: { status: 'MATCHED' } })
+      results.push({ pool, matchedRiders: cluster.rides.length })
+    }
+    return results
   }
 
-  const pending = mockStore.rideRequests.filter((ride) => ride.status === 'PENDING' && ride.vehicleType === vehicleType).slice(0, capacityFor(vehicleType))
-  const cluster = clusterRideRequests(pending, vehicleType)[0]
-  if (!cluster || (requireMultiple && cluster.rides.length < 2)) return null
-  const pool: MockPool = { id: mockStore.nextId(), vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType), driverDetails: null, shareTrackingUrl: null, createdAt: new Date() }
-  mockStore.pools.push(pool)
-  cluster.rides.forEach((ride, index) => {
-    const mockRide = mockStore.rideRequests.find((r) => r.id === ride.id)
-    if (mockRide) mockRide.status = 'MATCHED'
-    mockStore.poolMembers.push({ id: mockStore.nextId(), poolId: pool.id, userId: ride.userId, stopSequence: index + 1, individualFare: 0, paymentStatus: 'PENDING', paymentId: null, createdAt: new Date() })
-  })
-  return { pool, matchedRiders: cluster.rides.length }
+  const pending = mockStore.rideRequests.filter((ride) => ride.status === 'PENDING' && ride.vehicleType === vehicleType)
+  const clusters = clusterRideRequests(pending, vehicleType)
+  
+  for (const cluster of clusters) {
+    if (requireMultiple && cluster.rides.length < 2) continue
+    const pool: MockPool = { id: mockStore.nextId(), vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType), driverDetails: null, shareTrackingUrl: null, createdAt: new Date() }
+    mockStore.pools.push(pool)
+    cluster.rides.forEach((ride, index) => {
+      const mockRide = mockStore.rideRequests.find((r) => r.id === ride.id)
+      if (mockRide) mockRide.status = 'MATCHED'
+      mockStore.poolMembers.push({ id: mockStore.nextId(), poolId: pool.id, userId: ride.userId, stopSequence: index + 1, individualFare: 0, paymentStatus: 'PENDING', paymentId: null, createdAt: new Date() })
+    })
+    results.push({ pool, matchedRiders: cluster.rides.length })
+  }
+  
+  return results
 }
 
 function toRideCandidate(ride: { id: string; userId: string; pickupLat: number; pickupLng: number; dropoffLat: number; dropoffLng: number; flexTimeStart: Date; flexTimeEnd: Date; vehicleType: GroupingVehicleType }): RideCandidate {
@@ -89,6 +100,11 @@ router.post('/rides/request', async (req: Request, res: Response) => {
   }
 
   if (prisma) {
+    await prisma.user.upsert({
+      where: { id: payload.userId },
+      update: {},
+      create: { id: payload.userId, email: `${payload.userId}@iiitm.ac.in`, name: 'CampusPool User' }
+    })
     const ride = await prisma.rideRequest.create({ data: payload })
     await matchPendingRides(payload.vehicleType, true)
     return res.status(201).json(ride)
@@ -102,9 +118,9 @@ router.post('/rides/request', async (req: Request, res: Response) => {
 
 router.post('/pools/match', async (req: Request, res: Response) => {
   const vehicleType = req.body.vehicleType === 'CAB_4' ? 'CAB_4' as const : 'AUTO_3' as const
-  const result = await matchPendingRides(vehicleType)
-  if (!result) return res.status(200).json({ pool: null, matchedRiders: 0, message: 'No compatible pending rides found.' })
-  return res.status(201).json(result)
+  const results = await matchPendingRides(vehicleType)
+  if (results.length === 0) return res.status(200).json({ pools: [], totalMatched: 0, message: 'No compatible pending rides found.' })
+  return res.status(201).json({ pools: results.map(r => r.pool), totalMatched: results.reduce((acc, r) => acc + r.matchedRiders, 0) })
 })
 
 router.post('/pools/:id/sequence', async (req: Request, res: Response) => {

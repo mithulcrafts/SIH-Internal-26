@@ -5,25 +5,34 @@
 
 export type GeoLocation = { name: string; lat: number; lng: number }
 
-const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
-const GOOGLE_PLACES_URL = 'https://maps.googleapis.com/maps/api/place/autocomplete/json'
-const GOOGLE_GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json'
-const GOOGLE_DIRECTIONS_URL = 'https://maps.googleapis.com/maps/api/directions/json'
+const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY as string | undefined
 
 export const isGoogleMapsEnabled = (): boolean => Boolean(API_KEY)
 
-/** Places Autocomplete — returns typed location suggestions. */
+/** Places Autocomplete using MapTiler Geocoding API */
 export async function searchPlaces(query: string): Promise<GeoLocation[]> {
-  if (!API_KEY) return mockSearch(query)
+  const localResults = mockSearch(query)
+  if (!API_KEY) return localResults
   try {
-    const res = await fetch(`${GOOGLE_PLACES_URL}?input=${encodeURIComponent(query)}&key=${API_KEY}&components=country:in&location=26.246,78.170&radius=20000`)
+    const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?key=${API_KEY}&proximity=78.170,26.246&country=IN`)
     const data = await res.json()
-    return (data.predictions || []).map((p: { description: string; place_id: string }) => ({
-      name: p.description,
-      lat: 0, lng: 0, placeId: p.place_id,
-    } as GeoLocation & { placeId: string }))
+    const apiResults = (data.features || []).map((f: any) => ({
+      name: f.place_name || f.text,
+      lat: f.center[1],
+      lng: f.center[0],
+      placeId: f.id,
+    }))
+    
+    // Combine local results (prioritized) with API results, filtering out exact name duplicates
+    const combined = [...localResults]
+    apiResults.forEach((apiRes: GeoLocation) => {
+      if (!combined.some((r) => r.name === apiRes.name)) {
+        combined.push(apiRes)
+      }
+    })
+    return combined
   } catch {
-    return mockSearch(query)
+    return localResults
   }
 }
 
@@ -31,33 +40,30 @@ export async function searchPlaces(query: string): Promise<GeoLocation[]> {
 export async function geocode(address: string): Promise<{ lat: number; lng: number } | null> {
   if (!API_KEY) return mockGeocode(address)
   try {
-    const res = await fetch(`${GOOGLE_GEOCODE_URL}?address=${encodeURIComponent(address)}&key=${API_KEY}`)
+    const res = await fetch(`https://api.maptiler.com/geocoding/${encodeURIComponent(address)}.json?key=${API_KEY}`)
     const data = await res.json()
-    const loc = data.results?.[0]?.geometry?.location
-    return loc ? { lat: loc.lat, lng: loc.lng } : null
+    const loc = data.features?.[0]?.center
+    return loc ? { lat: loc[1], lng: loc[0] } : null
   } catch {
     return mockGeocode(address)
   }
 }
 
-/** Directions with TSP waypoint optimization (optimizeWaypoints: true). */
-export async function optimizeRoute(waypoints: GeoLocation[]): Promise<GeoLocation[]> {
-  if (!API_KEY || waypoints.length <= 2) return waypoints
+/** Reverse Geocoding — resolves a lat/lng to a place name. */
+export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  if (!API_KEY) return 'Custom destination'
   try {
-    const origin = waypoints[0]
-    const destination = waypoints[waypoints.length - 1]
-    const intermediate = waypoints.slice(1, -1).map((w) => `${w.lat},${w.lng}`).join('|')
-    const res = await fetch(
-      `${GOOGLE_DIRECTIONS_URL}?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&waypoints=optimize:true|${intermediate}&key=${API_KEY}`,
-    )
+    const res = await fetch(`https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${API_KEY}`)
     const data = await res.json()
-    const order = data.routes?.[0]?.waypoint_order as number[] | undefined
-    if (!order) return waypoints
-    const middle = waypoints.slice(1, -1)
-    return [origin, ...order.map((i) => middle[i]), destination]
+    return data.features?.[0]?.text || data.features?.[0]?.place_name || null
   } catch {
-    return waypoints
+    return 'Custom destination'
   }
+}
+
+/** Directions with TSP waypoint optimization (Mock only for now). */
+export async function optimizeRoute(waypoints: GeoLocation[]): Promise<GeoLocation[]> {
+  return waypoints // Kept simple as MapTiler directions is a separate API
 }
 
 // --- Mock fallbacks ---
