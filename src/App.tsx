@@ -1417,6 +1417,7 @@ function TrackingView({
   const [paying, setPaying] = useState(false);
   const [dispatchFailed, setDispatchFailed] = useState(false);
   const [poolData, setPoolData] = useState<any>(null);
+  const [fareBreakdown, setFareBreakdown] = useState<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token") || `demo-user`;
@@ -1494,6 +1495,7 @@ function TrackingView({
       fetch(`${apiUrl}/api/pools/${driverInfo.poolId}/split`, { method: "POST" })
         .then(res => res.json())
         .then(data => {
+           setFareBreakdown(data);
            const myShare = data.shares.find((s: any) => s.riderId === token);
            if (myShare) setAmountDue(myShare.individualFare);
         })
@@ -1550,11 +1552,33 @@ function TrackingView({
         <h2>Trip Completed!</h2>
         <p style={{ color: '#64748B', marginBottom: '32px' }}>Hope you had a safe journey back to {dropoff.name.split(" ")[0]}.</p>
         
-        <div style={{ background: '#F8FAFC', padding: '24px', borderRadius: '16px', width: '100%', marginBottom: '32px', border: '1px solid #E2E8F0' }}>
+        <div style={{ background: '#F8FAFC', padding: '24px', borderRadius: '16px', width: '100%', marginBottom: '24px', border: '1px solid #E2E8F0' }}>
           <small style={{ color: '#64748B', fontWeight: 600 }}>YOUR SHARE</small>
           <h1 style={{ fontSize: '48px', color: '#0F172A', margin: '8px 0' }}>₹{amountDue.toFixed(2)}</h1>
-          <p style={{ fontSize: '14px', color: '#94A3B8' }}>Calculated via Distance Split algorithm</p>
+          <p style={{ fontSize: '14px', color: '#94A3B8' }}>Distance Split Calculation</p>
         </div>
+
+        {fareBreakdown && (
+          <div style={{ width: '100%', textAlign: 'left', marginBottom: '32px', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ background: '#F1F5F9', padding: '12px 16px', fontWeight: 600, borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Total Uber Fare</span>
+              <span>₹{fareBreakdown.totalFare.toFixed(2)}</span>
+            </div>
+            <div style={{ padding: '8px 0' }}>
+              {fareBreakdown.shares.map((s: any, i: number) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 16px', fontSize: '14px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontWeight: s.riderId === (localStorage.getItem("token") || 'demo-user') ? 700 : 400, color: '#0F172A' }}>
+                      {s.riderId === (localStorage.getItem("token") || 'demo-user') ? 'You' : s.riderId.split('_')[0].toUpperCase() + '...' + s.riderId.slice(-3)}
+                    </span>
+                    <span style={{ color: '#64748B', fontSize: '12px' }}>{s.distanceKm.toFixed(1)} km traveled</span>
+                  </div>
+                  <span style={{ fontWeight: 600, color: '#0F172A' }}>₹{s.individualFare.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <button 
           className="button"
