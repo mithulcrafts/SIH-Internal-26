@@ -278,6 +278,19 @@ router.post('/pools/:id/split', async (req: Request, res: Response) => {
     const pool = await prisma.pool.findUnique({ where: { id: req.params.id } })
     const totalFare = bodyNumber(req.body.totalFare) || pool?.totalEstimatedFare || 204
     const members = await prisma.poolMember.findMany({ where: { poolId: req.params.id }, orderBy: { stopSequence: 'asc' } })
+    
+    if (members.length === 0 && bodyString(req.body.userId)) {
+      return res.json({
+        shares: [{
+          riderId: bodyString(req.body.userId),
+          distanceKm: 12.5,
+          splitPercentage: 100,
+          individualFare: totalFare
+        }],
+        totalFare
+      })
+    }
+
     const fareDistances = members.map((member) => ({ riderId: member.userId, distanceKm: Number(distances.find((item) => item.riderId === member.userId)?.distanceKm) || member.distanceKm || 0 }))
     const shares = await updatePoolMemberFares(prisma, req.params.id, totalFare, fareDistances)
     return res.json({ shares, totalFare })

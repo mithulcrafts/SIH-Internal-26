@@ -1525,7 +1525,11 @@ function TrackingView({
     if (tripEnded && pId) {
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
       const token = localStorage.getItem("token") || `demo-user`;
-      fetch(`${apiUrl}/api/pools/${pId}/split`, { method: "POST" })
+      fetch(`${apiUrl}/api/pools/${pId}/split`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: token })
+      })
         .then(res => res.json())
         .then(data => {
            setFareBreakdown(data);
