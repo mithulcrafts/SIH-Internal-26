@@ -664,15 +664,14 @@ function HomeView({
             <span /> LIVE
           </span>
           <strong>{activePoolsCount} active {activePoolsCount === 1 ? 'pool' : 'pools'} right now</strong>
-          <ChevronRight size={16} />
         </div>
       </section>
-      {waitingQueue.length > 0 && (
-        <section className="explore-section">
-          <div className="section-heading">
-            <h3>Waiting for a ride</h3>
-            <span>Live demand</span>
-          </div>
+      <section className="explore-section">
+        <div className="section-heading">
+          <h3>Waiting for a ride</h3>
+          <span>Live demand</span>
+        </div>
+        {waitingQueue.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
             {waitingQueue.map((w, i) => (
               <div key={i} style={{ padding: '12px 16px', background: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -691,8 +690,12 @@ function HomeView({
               </div>
             ))}
           </div>
-        </section>
-      )}
+        ) : (
+          <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '12px', border: '1px dashed #CBD5E1', textAlign: 'center', marginTop: '16px', color: '#64748B', fontSize: '14px' }}>
+            No one is currently waiting for a ride.<br />Request a ride to start a new pool!
+          </div>
+        )}
+      </section>
       <div className="section-heading">
         <h3>How it works</h3>
         <span>3 simple steps</span>
