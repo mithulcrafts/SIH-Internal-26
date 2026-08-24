@@ -21,6 +21,17 @@ const destinations: Location[] = [
   { name: 'City Center / DD Mall', lat: 26.2052, lng: 78.1944 },
   { name: 'Maharaj Bada', lat: 26.2005, lng: 78.1589 },
   { name: 'Rajmata Vijayaraje Scindia Airport', lat: 26.2941, lng: 78.2272 },
+  { name: 'BH-1', lat: 26.2495, lng: 78.174 },
+  { name: 'BH-2', lat: 26.2488, lng: 78.1732 },
+  { name: 'BH-3', lat: 26.2501, lng: 78.1748 },
+  { name: 'BH-4', lat: 26.251, lng: 78.1755 },
+  { name: 'Girls Hostel (GH)', lat: 26.2475, lng: 78.1718 },
+  { name: 'Main Gate', lat: 26.246, lng: 78.1702 },
+  { name: 'Cafeteria', lat: 26.248, lng: 78.173 },
+  { name: 'Satpura', lat: 26.249, lng: 78.176 },
+  { name: 'Academic Block', lat: 26.247, lng: 78.174 },
+  { name: 'Admin Block', lat: 26.2465, lng: 78.1735 },
+  { name: 'MDP', lat: 26.2485, lng: 78.172 },
 ]
 const members = [
   { name: 'Aarav Mehta', initials: 'AM', color: 'gold', paid: true, stop: 1 },
