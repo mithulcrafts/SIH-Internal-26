@@ -356,6 +356,7 @@ function App() {
             setMessage={setChatMessage}
             sendMessage={sendMessage}
             onTrack={() => setStage("tracking")}
+            onMatching={() => setStage("matching")}
           />
         )}
         {stage === "tracking" && (
@@ -369,6 +370,7 @@ function App() {
             sosSent={sosSent}
             onSos={() => setSosSent(true)}
             onBack={() => setStage("pool")}
+            onMatching={() => setStage("matching")}
             onShare={() => {
               setToast("Trip tracking link copied to clipboard!");
               window.setTimeout(() => setToast(""), 2500);
@@ -1157,6 +1159,7 @@ function PoolView({
   setMessage,
   sendMessage,
   onTrack,
+  onMatching,
 }: {
   pickup: Location;
   dropoff: Location;
@@ -1173,6 +1176,7 @@ function PoolView({
   setMessage: (value: string) => void;
   sendMessage: () => void;
   onTrack: () => void;
+  onMatching: () => void;
 }) {
   const [activePool, setActivePool] = useState<any>(null);
   const [realMembers, setRealMembers] = useState<any[]>([]);
@@ -1182,7 +1186,7 @@ function PoolView({
   // Simulate rider state
   const [showSimPanel, setShowSimPanel] = useState(false);
   const [simName, setSimName] = useState("");
-  const [simDestination, setSimDestination] = useState("Gwalior Railway Station");
+  const [simDestination, setSimDestination] = useState<Location>({ name: "Gwalior Railway Station", lat: 26.2183, lng: 78.1828 });
   const [simVehicle, setSimVehicle] = useState<Vehicle>(vehicle || "AUTO_3");
   const [simulating, setSimulating] = useState(false);
   const [simulatedRiders, setSimulatedRiders] = useState<{ name: string; destination: string; matched: boolean }[]>([]);
@@ -1212,7 +1216,15 @@ function PoolView({
             setNoActiveRides(false);
           }
           if (data.error === "No active pool found") {
-            setNoActiveRides(true);
+            fetch(`${apiUrl}/api/pools/waiting`)
+              .then(res => res.json())
+              .then(wData => {
+                 if (wData.waiting && wData.waiting.some((w: any) => w.userId === token)) {
+                    onMatching();
+                 } else {
+                    setNoActiveRides(true);
+                 }
+              }).catch(() => setNoActiveRides(true));
           }
         })
         .catch(() => setNoActiveRides(true));
@@ -1226,7 +1238,7 @@ function PoolView({
   const handleSimulateRider = async () => {
     if (!simName.trim()) return;
     setSimulating(true);
-    const dest = DESTINATIONS.find((d) => d.name === simDestination) || DESTINATIONS[0];
+    const dest = simDestination;
     try {
       const res = await fetch(`${apiUrl}/api/simulate/rider`, {
         method: "POST",
@@ -1399,15 +1411,33 @@ function PoolView({
                 onKeyDown={(e) => e.key === "Enter" && handleSimulateRider()}
                 style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '14px', outline: 'none' }}
               />
-              <select
-                value={simDestination}
-                onChange={(e) => setSimDestination(e.target.value)}
-                style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: '#fff' }}
-              >
-                {DESTINATIONS.map((d) => (
-                  <option key={d.name} value={d.name}>{d.name}</option>
-                ))}
-              </select>
+              <div className="map-picker">
+                <div className="map-label">
+                  <span>
+                    <Crosshair size={15} /> Tap map to pin destination
+                  </span>
+                  <small>
+                    {simDestination.lat.toFixed(4)}, {simDestination.lng.toFixed(4)}
+                  </small>
+                </div>
+                <div
+                  style={{
+                    width: "100%",
+                    height: "150px",
+                    margin: "10px 0",
+                    padding: "0",
+                  }}
+                >
+                  <InteractiveMap
+                    pickup={currentPickup}
+                    dropoff={simDestination}
+                    onMapClick={async (lat, lng) => {
+                      const name = await reverseGeocode(lat, lng);
+                      setSimDestination({ name: name || "Custom destination", lat, lng });
+                    }}
+                  />
+                </div>
+              </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   className={simVehicle === 'AUTO_3' ? 'primary-button' : 'share-button'}
@@ -1692,6 +1722,7 @@ function TrackingView({
   onSos,
   onBack,
   onShare,
+  onMatching,
 }: {
   pickup: Location;
   dropoff: Location;
@@ -1703,6 +1734,7 @@ function TrackingView({
   onSos: () => void;
   onBack: () => void;
   onShare: () => void;
+  onMatching: () => void;
 }) {
   const [driverInfo, setDriverInfo] = useState<any>(null);
   const [liveEta, setLiveEta] = useState<number>(time);
@@ -1739,6 +1771,15 @@ function TrackingView({
         if (data.pool && data.pool.driverDetails) {
           const parsedDriver = typeof data.pool.driverDetails === 'string' ? JSON.parse(data.pool.driverDetails) : data.pool.driverDetails;
           setDriverInfo({ driver: parsedDriver, etaMinutes: time, distanceKm: distance, poolId: data.pool.id });
+        }
+        if (data.error === "No active pool found") {
+           fetch(`${apiUrl}/api/pools/waiting`)
+             .then(r => r.json())
+             .then(wData => {
+                if (wData.waiting && wData.waiting.some((w: any) => w.userId === token)) {
+                   onMatching();
+                }
+             }).catch(console.error);
         }
       })
       .catch(console.error);
