@@ -1467,6 +1467,13 @@ function PoolView({
       : activePool.driverDetails
     : null;
 
+  // Auto-redirect to tracking if ride is already dispatched
+  useEffect(() => {
+    if (activePool?.status === "DISPATCHED" || driverInfo) {
+      onTrack();
+    }
+  }, [activePool?.status, driverInfo, onTrack]);
+
   return (
     <div className="pool-view">
       <div className="pool-top">
@@ -1595,10 +1602,17 @@ function PoolView({
         <div className="payment-bar" style={{ marginTop: '12px' }}>
           <span style={{ width: paid ? "100%" : "66%" }} />
         </div>
-        <button className="primary-button wide" style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px' }} onClick={onTrack}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#fff"/><text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" fill="#000" fontSize="7" fontWeight="700" fontFamily="sans-serif">Uber</text></svg>
-          Book Uber · Track Ride
-        </button>
+        {driverInfo ? (
+          <button className="primary-button wide" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px' }} onClick={onTrack}>
+            <ShieldCheck size={18} />
+            Return to Active Ride
+          </button>
+        ) : (
+          <button className="primary-button wide" style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px' }} onClick={onTrack}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#fff"/><text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" fill="#000" fontSize="7" fontWeight="700" fontFamily="sans-serif">Uber</text></svg>
+            Book Uber · Track Ride
+          </button>
+        )}
       </section>
 
       {chatOpen && (
@@ -2412,8 +2426,8 @@ function BottomNav({
         className={stage === "tracking" ? "active" : ""}
         onClick={onSafety}
       >
-        <ShieldCheck size={20} />
-        <span>Safety</span>
+        <Navigation size={20} />
+        <span>Active Ride</span>
       </button>
       <button
         className={stage === "support" ? "active" : ""}
