@@ -246,16 +246,11 @@ function App() {
         window.setTimeout(() => setToast(""), 3500);
         setStage("home");
       } else {
-        setStage("matching");
-        window.setTimeout(() => {
-          if (data.poolId) {
-            setStage("pool");
-          } else {
-            setToast("Added to waiting queue! Waiting for others to join...");
-            window.setTimeout(() => setToast(""), 3500);
-            setStage("home");
-          }
-        }, 1600);
+        if (data && data.poolId) {
+          setStage("pool");
+        } else {
+          setStage("matching");
+        }
       }
     } catch (e) {
       console.error(e);
@@ -337,7 +332,13 @@ function App() {
           />
         )}
         {stage === "matching" && (
-          <MatchingView pickup={pickup} dropoff={dropoff} />
+          <MatchingView
+            pickup={pickup}
+            dropoff={dropoff}
+            vehicle={vehicle}
+            onMatched={() => setStage("pool")}
+            onCancel={() => setStage("request")}
+          />
         )}
         {stage === "pool" && (
           <PoolView
@@ -1101,10 +1102,97 @@ function RequestView({
 function MatchingView({
   pickup,
   dropoff,
+  vehicle,
+  onMatched,
+  onCancel,
 }: {
   pickup: Location;
   dropoff: Location;
+  vehicle: Vehicle;
+  onMatched: () => void;
+  onCancel: () => void;
 }) {
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [timedOut, setTimedOut] = useState(false);
+  const token = localStorage.getItem("token") || "demo-user";
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+  // 30-second countdown timer
+  useEffect(() => {
+    if (timedOut) return;
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setTimedOut(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timedOut]);
+
+  // Live polling for matching pools every 2 seconds
+  useEffect(() => {
+    if (timedOut) return;
+
+    const checkMatch = () => {
+      fetch(`${apiUrl}/api/pools/match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vehicleType: vehicle }),
+      }).catch(() => {});
+
+      fetch(`${apiUrl}/api/pools/active/${token}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && (data.pool || (data.members && data.members.length > 0))) {
+            onMatched();
+          }
+        })
+        .catch(console.error);
+    };
+
+    checkMatch();
+    const interval = setInterval(checkMatch, 2000);
+    return () => clearInterval(interval);
+  }, [token, apiUrl, vehicle, onMatched, timedOut]);
+
+  const handleRetry = () => {
+    setTimedOut(false);
+    setTimeLeft(30);
+  };
+
+  if (timedOut) {
+    return (
+      <div className="matching-view">
+        <div className="matching-copy" style={{ marginTop: "20px" }}>
+          <div style={{ background: "#FEF2F2", width: "64px", height: "64px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", border: "1px solid #FCA5A5" }}>
+            <AlertTriangle size={32} color="#EF4444" />
+          </div>
+          <p className="eyebrow" style={{ color: "#EF4444" }}>SEARCH TIMED OUT (30s)</p>
+          <h2>No matching pool found</h2>
+          <p style={{ fontSize: "14px", color: "#64748B", marginBottom: "24px" }}>
+            No fellow students near <strong>{pickup.name}</strong> going towards <strong>{dropoff.name}</strong> were matched in 30 seconds.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%", maxWidth: "340px", margin: "0 auto" }}>
+            <button className="primary-button wide" onClick={handleRetry} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+              <Clock3 size={17} /> Search again (30s timer)
+            </button>
+            <button className="share-button wide" onClick={onMatched} style={{ width: "100%", justifyContent: "center", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Users size={17} /> Enter pool room & add co-riders
+            </button>
+            <button onClick={onCancel} style={{ background: "none", border: "none", color: "#64748B", cursor: "pointer", fontSize: "13px", marginTop: "8px" }}>
+              ← Change pickup / dropoff details
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="matching-view">
       <div className="matching-map">
@@ -1122,7 +1210,7 @@ function MatchingView({
         <span className="loading-ring">
           <Users size={23} />
         </span>
-        <p className="eyebrow">LOOKING AROUND CAMPUS</p>
+        <p className="eyebrow">LOOKING AROUND CAMPUS · {timeLeft}s</p>
         <h2>
           Finding your
           <br />
@@ -1132,9 +1220,11 @@ function MatchingView({
           Matching students near {pickup.name} going towards {dropoff.name}.
         </p>
         <div className="match-progress">
-          <span />
+          <span style={{ width: `${((30 - timeLeft) / 30) * 100}%`, transition: "width 1s linear" }} />
         </div>
-        <small>Usually takes less than a minute</small>
+        <small style={{ fontWeight: 600, color: "#1E4E8C", marginTop: "8px", display: "block" }}>
+          Searching live network... ({timeLeft}s remaining)
+        </small>
       </div>
     </div>
   );
@@ -1204,25 +1294,31 @@ function PoolView({
       fetch(`${apiUrl}/api/pools/active/${token}`)
         .then((res) => res.json())
         .then((data) => {
-          if (data.pool) {
+          if (data && data.pool) {
             setActivePool(data.pool);
             setNoActiveRides(false);
           }
-          if (data.members && data.members.length > 0) {
+          if (data && data.members && data.members.length > 0) {
             setRealMembers(data.members);
             setNoActiveRides(false);
           }
-          if (data.error === "No active pool found") {
+          if (!data || !data.pool) {
             fetch(`${apiUrl}/api/pools/waiting`)
-              .then(res => res.json())
-              .then(wData => {
-                 if (wData.waiting && wData.waiting.some((w: any) => w.userId === token) && !sessionStorage.getItem('simulate-override')) {
-                    onMatching();
-                 } else {
-                    sessionStorage.removeItem('simulate-override');
-                    setNoActiveRides(true);
-                 }
-              }).catch(() => setNoActiveRides(true));
+              .then((res) => res.json())
+              .then((wData) => {
+                if (
+                  wData &&
+                  wData.waiting &&
+                  wData.waiting.some((w: any) => w.userId === token) &&
+                  !sessionStorage.getItem("simulate-override")
+                ) {
+                  onMatching();
+                } else {
+                  sessionStorage.removeItem("simulate-override");
+                  setNoActiveRides(true);
+                }
+              })
+              .catch(() => setNoActiveRides(true));
           }
         })
         .catch(() => setNoActiveRides(true));
@@ -1231,7 +1327,49 @@ function PoolView({
     fetchPool();
     const interval = setInterval(fetchPool, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [token, apiUrl]);
+
+  // Chat polling for PoolView
+  const [chatMessages, setChatMessages] = useState<{ name: string; text: string; time: string; isOwn?: boolean }[]>([]);
+  const [chatMessage, setChatMessage] = useState("");
+
+  const driverInfo = activePool?.driverDetails
+    ? typeof activePool.driverDetails === "string"
+      ? JSON.parse(activePool.driverDetails)
+      : activePool.driverDetails
+    : null;
+
+  useEffect(() => {
+    const poolId = activePool?.id;
+    if (!poolId) return;
+
+    const fetchChat = () => {
+      fetch(`${apiUrl}/api/chat/${poolId}`)
+        .then((res) => res.json())
+        .then((msgs: any[]) => {
+          if (Array.isArray(msgs)) {
+            setChatMessages(msgs.map((m) => ({
+              name: m.user?.name || m.userId?.split("-")[0] || "Rider",
+              text: m.text,
+              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              isOwn: m.userId === token,
+            })));
+          }
+        })
+        .catch(console.error);
+    };
+
+    fetchChat();
+    const interval = setInterval(fetchChat, 3000);
+    return () => clearInterval(interval);
+  }, [activePool?.id, token, apiUrl]);
+
+  // Auto-redirect to tracking if ride is already dispatched
+  useEffect(() => {
+    if (activePool?.status === "DISPATCHED" || driverInfo) {
+      onTrack();
+    }
+  }, [activePool?.status, driverInfo, onTrack]);
 
   const handleSimulateRider = async () => {
     if (!simName.trim()) return;
@@ -1301,50 +1439,22 @@ function PoolView({
     ? activePool.id.replace(/-/g, "").substring(0, 4).toUpperCase()
     : "----";
 
-  const displayMembers = realMembers.map((m, i) => {
-    let rawName = m.user?.name || m.name || "Rider";
-    if (rawName.length > 20) rawName = "Rider";
+  const displayMembers = (realMembers || []).map((m, i) => {
+    let rawName = m?.user?.name || m?.name || "Rider";
+    if (typeof rawName !== "string" || rawName.length > 20) rawName = "Rider";
     return {
       name: rawName,
       initials: rawName.substring(0, 2).toUpperCase(),
-      color: m.userId === token ? "navy" : i % 2 === 0 ? "green" : "gold",
-      paid: m.paymentStatus === "PAID",
-      stop: m.stopSequence,
-      userId: m.userId,
-      individualFare: m.individualFare,
-      distanceKm: m.distanceKm || 0,
+      color: m?.userId === token ? "navy" : i % 2 === 0 ? "green" : "gold",
+      paid: m?.paymentStatus === "PAID",
+      stop: m?.stopSequence || (i + 1),
+      userId: m?.userId || `user-${i}`,
+      individualFare: m?.individualFare || 0,
+      distanceKm: m?.distanceKm || 0,
     };
   });
 
   const maxSeats = (activePool?.vehicleType === "CAB_4" || vehicle === "CAB_4") ? 4 : 3;
-  // Chat polling for PoolView
-  const [chatMessages, setChatMessages] = useState<{ name: string; text: string; time: string; isOwn?: boolean }[]>([]);
-  const [chatMessage, setChatMessage] = useState("");
-
-  useEffect(() => {
-    const poolId = activePool?.id;
-    if (!poolId) return;
-
-    const fetchChat = () => {
-      fetch(`${apiUrl}/api/chat/${poolId}`)
-        .then((res) => res.json())
-        .then((msgs: any[]) => {
-          if (Array.isArray(msgs)) {
-            setChatMessages(msgs.map((m) => ({
-              name: m.user?.name || m.userId?.split("-")[0] || "Rider",
-              text: m.text,
-              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              isOwn: m.userId === token,
-            })));
-          }
-        })
-        .catch(console.error);
-    };
-
-    fetchChat();
-    const interval = setInterval(fetchChat, 3000);
-    return () => clearInterval(interval);
-  }, [activePool?.id]);
 
   const sendChatMessage = () => {
     if (!chatMessage.trim()) return;
@@ -1487,20 +1597,6 @@ function PoolView({
       </div>
     );
   }
-
-  // ── Active pool found: show full ride details ──
-  const driverInfo = activePool?.driverDetails
-    ? typeof activePool.driverDetails === "string"
-      ? JSON.parse(activePool.driverDetails)
-      : activePool.driverDetails
-    : null;
-
-  // Auto-redirect to tracking if ride is already dispatched
-  useEffect(() => {
-    if (activePool?.status === "DISPATCHED" || driverInfo) {
-      onTrack();
-    }
-  }, [activePool?.status, driverInfo, onTrack]);
 
   return (
     <div className="pool-view">
