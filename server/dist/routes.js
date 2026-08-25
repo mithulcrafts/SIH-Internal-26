@@ -94,11 +94,17 @@ async function matchPendingRides(vehicleType, requireMultiple = false) {
             continue;
         const pool = { id: mockStore_1.mockStore.nextId(), vehicleType, maxCapacity: cluster.capacity, status: cluster.rides.length >= cluster.capacity ? 'FULL' : 'OPEN', totalEstimatedFare: fareFor(vehicleType), driverDetails: null, shareTrackingUrl: null, createdAt: new Date() };
         mockStore_1.mockStore.pools.push(pool);
+        const distances = cluster.rides.map(r => ({
+            riderId: r.userId,
+            distanceKm: (0, groupingEngine_1.haversine)(r.pickupLat, r.pickupLng, r.dropoffLat, r.dropoffLng)
+        }));
+        const shares = (0, fareSplitter_1.calculateDistanceWeightedFares)(fareFor(vehicleType), distances);
         cluster.rides.forEach((ride, index) => {
             const mockRide = mockStore_1.mockStore.rideRequests.find((r) => r.id === ride.id);
             if (mockRide)
                 mockRide.status = 'MATCHED';
-            mockStore_1.mockStore.poolMembers.push({ id: mockStore_1.mockStore.nextId(), poolId: pool.id, userId: ride.userId, stopSequence: index + 1, distanceKm: 0, individualFare: 0, paymentStatus: 'PENDING', paymentId: null, createdAt: new Date() });
+            const share = shares.find(s => s.riderId === ride.userId);
+            mockStore_1.mockStore.poolMembers.push({ id: mockStore_1.mockStore.nextId(), poolId: pool.id, userId: ride.userId, stopSequence: index + 1, distanceKm: share?.distanceKm || 0, individualFare: share?.individualFare || 0, paymentStatus: 'PENDING', paymentId: null, createdAt: new Date() });
         });
         results.push({ pool, matchedRiders: cluster.rides.length });
     }
@@ -168,6 +174,12 @@ router.post('/rides/request', async (req, res) => {
         const matchedPool = results.find(r => r.pool && r.pool.id);
         return res.status(201).json({ ...ride, poolId: matchedPool ? matchedPool.pool.id : null });
     }
+    // Cancel any old pending mock rides for this user
+    mockStore_1.mockStore.rideRequests.forEach(r => {
+        if (r.userId === payload.userId && r.status === 'PENDING') {
+            r.status = 'CANCELLED';
+        }
+    });
     const ride = { ...payload, id: mockStore_1.mockStore.nextId(), status: 'PENDING', createdAt: new Date() };
     mockStore_1.mockStore.rideRequests.push(ride);
     await matchPendingRides(payload.vehicleType, true);
