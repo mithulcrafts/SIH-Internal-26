@@ -1291,18 +1291,66 @@ function PoolView({
     ? activePool.id.replace(/-/g, "").substring(0, 4).toUpperCase()
     : "----";
 
-  const displayMembers = realMembers.map((m, i) => ({
-    name: m.user?.name || "Rider",
-    initials: (m.user?.name || "Rider").substring(0, 2).toUpperCase(),
-    color: m.userId === token ? "navy" : i % 2 === 0 ? "green" : "gold",
-    paid: m.paymentStatus === "PAID",
-    stop: m.stopSequence,
-    userId: m.userId,
-    individualFare: m.individualFare,
-    distanceKm: m.distanceKm || 0,
-  }));
+  const displayMembers = realMembers.map((m, i) => {
+    let rawName = m.user?.name || m.name || "Rider";
+    if (rawName.length > 20) rawName = "Rider";
+    return {
+      name: rawName,
+      initials: rawName.substring(0, 2).toUpperCase(),
+      color: m.userId === token ? "navy" : i % 2 === 0 ? "green" : "gold",
+      paid: m.paymentStatus === "PAID",
+      stop: m.stopSequence,
+      userId: m.userId,
+      individualFare: m.individualFare,
+      distanceKm: m.distanceKm || 0,
+    };
+  });
 
   const maxSeats = (activePool?.vehicleType === "CAB_4" || vehicle === "CAB_4") ? 4 : 3;
+  // Chat polling for PoolView
+  const [chatMessages, setChatMessages] = useState<{ name: string; text: string; time: string; isOwn?: boolean }[]>([]);
+  const [chatMessage, setChatMessage] = useState("");
+
+  useEffect(() => {
+    const poolId = activePool?.id;
+    if (!poolId) return;
+
+    const fetchChat = () => {
+      fetch(`${apiUrl}/api/chat/${poolId}`)
+        .then((res) => res.json())
+        .then((msgs: any[]) => {
+          if (Array.isArray(msgs)) {
+            setChatMessages(msgs.map((m) => ({
+              name: m.user?.name || m.userId?.split("-")[0] || "Rider",
+              text: m.text,
+              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              isOwn: m.userId === token,
+            })));
+          }
+        })
+        .catch(console.error);
+    };
+
+    fetchChat();
+    const interval = setInterval(fetchChat, 3000);
+    return () => clearInterval(interval);
+  }, [activePool?.id]);
+
+  const sendChatMessage = () => {
+    if (!chatMessage.trim()) return;
+    const poolId = activePool?.id;
+    if (!poolId) return;
+
+    fetch(`${apiUrl}/api/chat/${poolId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: token, text: chatMessage.trim() }),
+    })
+      .then((res) => res.json())
+      .then(() => setChatMessage(""))
+      .catch(console.error);
+  };
+
   const myMember = realMembers.find((m) => m.userId === token);
   const estimatedShare = (myMember?.individualFare ?? 0) > 0 ? myMember!.individualFare : fare;
 
@@ -1554,7 +1602,7 @@ function PoolView({
       </section>
 
       {chatOpen && (
-        <ChatDrawer messages={messages} message={message} setMessage={setMessage} sendMessage={sendMessage} onClose={() => setChatOpen(false)} />
+        <ChatDrawer messages={chatMessages} message={chatMessage} setMessage={setChatMessage} sendMessage={sendChatMessage} onClose={() => setChatOpen(false)} />
       )}
       {splitModalOpen && (
         <DistanceSplitModal members={displayMembers} totalFare={activePool?.totalEstimatedFare || fare} onClose={() => setSplitModalOpen(false)} />
