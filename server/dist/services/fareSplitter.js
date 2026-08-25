@@ -22,7 +22,7 @@ function calculateDistanceWeightedFares(baseFare, distances) {
 /** Persists the calculated shares to PoolMember rows in one logical operation. */
 async function updatePoolMemberFares(prisma, poolId, baseFare, distances) {
     const shares = calculateDistanceWeightedFares(baseFare, distances);
-    await Promise.all(shares.map((share) => prisma.poolMember.updateMany({ where: { poolId, userId: share.riderId }, data: { individualFare: share.individualFare } })));
+    await Promise.all(shares.map((share) => prisma.poolMember.updateMany({ where: { poolId, userId: share.riderId }, data: { individualFare: share.individualFare, distanceKm: share.distanceKm } })));
     return shares;
 }
 //# sourceMappingURL=fareSplitter.js.map

@@ -322,6 +322,79 @@ button{border:0;cursor:pointer}
 .sos-button.sent{background:var(--green-tint);color:var(--green)}
 .sos-confirm{display:flex;gap:8px;align-items:center;background:var(--green-tint);color:var(--green);padding:11px 13px;border-radius:11px;font-size:11px;margin-top:11px}
 
+/* TRACKING SECTIONS */
+.tracking-section{background:var(--card);border:1px solid var(--border-strong);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+.tracking-section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.tracking-section-header h3{display:flex;align-items:center;gap:6px;font:600 14px 'Space Grotesk';color:var(--text);margin:0}
+.tracking-badge{font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-tint);padding:4px 10px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase}
+.tracking-badge.live{color:var(--green);background:var(--green-tint);animation:pulse-badge 2s infinite}
+@keyframes pulse-badge{0%,100%{opacity:1}50%{opacity:.6}}
+
+/* CO-RIDERS */
+.co-riders-list{display:flex;flex-direction:column;gap:4px}
+.co-rider-card{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;transition:background .15s}
+.co-rider-card.is-me{background:var(--blue-tint)}
+.co-rider-card.empty-seat{opacity:.5}
+.co-rider-info{flex:1}
+.co-rider-info strong{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text)}
+.co-rider-info small{display:block;color:var(--text-muted);font-size:11px;margin-top:2px}
+.you-badge{font-size:9px;background:var(--blue);color:#fff;padding:2px 6px;border-radius:4px;font-weight:700;letter-spacing:.3px}
+.member-avatar.empty{background:var(--bg-alt);color:var(--text-faint);border:2px dashed var(--border-strong)}
+
+/* FARE SUMMARY */
+.fare-summary-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.fare-summary-top h2{font:700 28px 'Space Grotesk';margin:0;color:var(--text)}
+.fare-summary-top .eyebrow{margin-bottom:4px}
+.fare-detail-row{display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.fare-detail-row span{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);font-weight:500}
+.fare-note{margin-top:10px}
+.fare-note small{color:var(--text-faint);font-size:11px;line-height:1.5}
+
+/* UBER BOOKING CARD */
+.uber-booking-card{background:#0C0C0C!important;border-color:#333!important;color:#fff}
+.uber-booking-header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+.uber-logo-mark{flex:none}
+.uber-booking-header h3{color:#fff;margin:0;font:600 16px 'Space Grotesk'}
+.uber-booking-header p{color:#999;font-size:12px;margin:3px 0 0}
+.uber-book-button{width:100%;padding:14px;background:#fff;color:#000;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .15s}
+.uber-book-button:hover{background:#E5E5E5}
+.uber-disclaimer{margin-top:14px;padding:12px;background:rgba(255,255,255,.06);border-radius:8px}
+.uber-disclaimer small{color:#888;font-size:11px;line-height:1.5}
+
+/* DRIVER SELECT LIST */
+.driver-select-list{display:flex;flex-direction:column;gap:6px}
+.driver-select-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.driver-select-header small{color:#999;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.driver-option{display:flex;align-items:center;gap:12px;padding:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;cursor:pointer;transition:all .15s;text-align:left;width:100%;color:#fff}
+.driver-option:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2)}
+.driver-option-avatar{width:40px;height:40px;border-radius:10px;background:#333;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex:none}
+.driver-option-info{flex:1}
+.driver-option-info strong{display:block;font-size:14px;color:#fff;margin-bottom:2px}
+.driver-option-info small{display:block;font-size:11px;color:#999}
+.driver-option-meta{display:flex;align-items:center;gap:4px;font-size:11px;color:#ccc;margin-top:3px}
+.driver-option-eta{text-align:center;flex:none;min-width:50px}
+.driver-option-eta strong{display:block;font-size:16px;color:#fff}
+.driver-option-eta small{display:block;font-size:10px;color:#999}
+
+/* UBER REDIRECT OVERLAY */
+.uber-redirect-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:100;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease}
+.uber-redirect-content{text-align:center;color:#fff;padding:40px}
+.uber-redirect-content h2{font:600 24px 'Space Grotesk';margin:20px 0 8px;color:#fff}
+.uber-redirect-content p{color:#999;font-size:14px;margin-bottom:32px}
+.uber-redirect-content small{color:#666;font-size:12px}
+.uber-logo-animated{animation:pulse-logo 1.5s infinite ease-in-out}
+@keyframes pulse-logo{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.8}}
+.uber-redirect-progress{height:3px;background:#333;border-radius:4px;width:200px;margin:0 auto 16px;overflow:hidden}
+.uber-redirect-progress span{display:block;height:100%;width:100%;background:linear-gradient(90deg,#333,#fff,#333);background-size:200%;animation:shimmer 1.2s infinite linear}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* CHAT FAB */
+.chat-fab{position:fixed;bottom:90px;right:20px;width:56px;height:56px;border-radius:50%;background:var(--blue);color:#fff;border:none;box-shadow:0 4px 16px rgba(30,78,140,.35);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:25;transition:transform .15s,box-shadow .15s}
+.chat-fab:hover{transform:scale(1.08);box-shadow:0 6px 20px rgba(30,78,140,.45)}
+.chat-fab-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:10px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff}
+
+
 /* BOTTOM NAV */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;height:72px;background:rgba(255,255,255,.96);backdrop-filter:blur(16px);border-top:1px solid var(--border);display:flex;justify-content:center;gap:clamp(20px,8vw,72px);z-index:20}
 .bottom-nav button{background:none;color:var(--text-faint);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;min-width:50px;transition:color .15s}

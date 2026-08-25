@@ -48,6 +48,7 @@ export interface MockPoolMember {
   poolId: string
   userId: string
   stopSequence: number
+  distanceKm: number
   individualFare: number
   paymentStatus: PaymentStatus
   paymentId: string | null

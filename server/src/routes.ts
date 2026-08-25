@@ -6,7 +6,7 @@ import { clusterRideRequests, isCompatible, haversine, type GroupingVehicleType,
 import { calculateDistanceWeightedFares, updatePoolMemberFares } from './services/fareSplitter'
 import { optimizeRoute } from './services/routeOptimizer'
 import { createOrder, verifySignature } from './services/razorpay'
-import { dispatchTrip } from './services/uber'
+import { dispatchTrip, getMockDrivers } from './services/uber'
 
 const router = Router()
 const jwtSecret = process.env.JWT_SECRET || 'development-only-secret'
@@ -102,7 +102,7 @@ export async function matchPendingRides(vehicleType: GroupingVehicleType, requir
     cluster.rides.forEach((ride, index) => {
       const mockRide = mockStore.rideRequests.find((r) => r.id === ride.id)
       if (mockRide) mockRide.status = 'MATCHED'
-      mockStore.poolMembers.push({ id: mockStore.nextId(), poolId: pool.id, userId: ride.userId, stopSequence: index + 1, individualFare: 0, paymentStatus: 'PENDING', paymentId: null, createdAt: new Date() })
+      mockStore.poolMembers.push({ id: mockStore.nextId(), poolId: pool.id, userId: ride.userId, stopSequence: index + 1, distanceKm: 0, individualFare: 0, paymentStatus: 'PENDING', paymentId: null, createdAt: new Date() })
     })
     results.push({ pool, matchedRiders: cluster.rides.length })
   }
@@ -110,8 +110,8 @@ export async function matchPendingRides(vehicleType: GroupingVehicleType, requir
   return results
 }
 
-function toRideCandidate(ride: { id: string; userId: string; pickupLat: number; pickupLng: number; dropoffLat: number; dropoffLng: number; flexTimeStart: Date; flexTimeEnd: Date; vehicleType: GroupingVehicleType }): RideCandidate {
-  return { id: ride.id, userId: ride.userId, pickupLat: ride.pickupLat, pickupLng: ride.pickupLng, dropoffLat: ride.dropoffLat, dropoffLng: ride.dropoffLng, flexTimeStart: ride.flexTimeStart, flexTimeEnd: ride.flexTimeEnd, vehicleType: ride.vehicleType }
+function toRideCandidate(ride: { id: string; userId: string; pickupLat: number; pickupLng: number; dropoffLat: number; dropoffLng: number; flexTimeStart: Date; flexTimeEnd: Date; vehicleType: string }): RideCandidate {
+  return { id: ride.id, userId: ride.userId, pickupLat: ride.pickupLat, pickupLng: ride.pickupLng, dropoffLat: ride.dropoffLat, dropoffLng: ride.dropoffLng, flexTimeStart: ride.flexTimeStart, flexTimeEnd: ride.flexTimeEnd, vehicleType: ride.vehicleType as GroupingVehicleType }
 }
 
 router.post('/auth/send-otp', (req: Request, res: Response) => {
@@ -246,9 +246,73 @@ router.get('/pools/active/:userId', async (req: Request, res: Response) => {
       orderBy: { stopSequence: 'asc' },
       include: { user: true }
     })
-    return res.json({ pool: member.pool, members: allMembers })
+    return res.json({ pool: member.pool, members: allMembers })  }
+  // Mock fallback: look up real data from the in-memory store
+  const userId = req.params.userId
+  const membership = mockStore.poolMembers.find(pm => pm.userId === userId)
+  if (!membership) return res.status(404).json({ error: 'No active pool found' })
+
+  const pool = mockStore.pools.find(p => p.id === membership.poolId)
+  if (!pool || pool.status === 'COMPLETED' || pool.status === 'CANCELLED' as any) {
+    return res.status(404).json({ error: 'No active pool found' })
   }
-  return res.status(404).json({ error: 'Mock fallback not implemented for active pools' })
+
+  const allMembers = mockStore.poolMembers
+    .filter(pm => pm.poolId === pool.id)
+    .sort((a, b) => a.stopSequence - b.stopSequence)
+    .map(pm => ({
+      ...pm,
+      user: mockStore.users.find(u => u.id === pm.userId) || { name: pm.userId, email: '' },
+    }))
+
+  return res.json({ pool, members: allMembers })
+})
+
+// ── Simulate another rider (for demo purposes) ──
+router.post('/simulate/rider', async (req: Request, res: Response) => {
+  const name = bodyString(req.body.name) || 'Simulated Rider'
+  const pickupLocationName = bodyString(req.body.pickupLocationName) || 'IIITM Main Gate'
+  const dropoffLocationName = bodyString(req.body.dropoffLocationName) || 'Gwalior Railway Station'
+  const pickupLat = bodyNumber(req.body.pickupLat) || 26.2485
+  const pickupLng = bodyNumber(req.body.pickupLng) || 78.1735
+  const dropoffLat = bodyNumber(req.body.dropoffLat) || 26.2183
+  const dropoffLng = bodyNumber(req.body.dropoffLng) || 78.1828
+  const vehicleType = req.body.vehicleType === 'CAB_4' ? 'CAB_4' as const : 'AUTO_3' as const
+
+  // Create a unique simulated user ID
+  const simUserId = 'sim_' + name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now().toString(36)
+  const simEmail = simUserId + '@iiitm.ac.in'
+
+  if (prisma) {
+    await prisma.user.create({ data: { id: simUserId, email: simEmail, name } })
+    const ride = await prisma.rideRequest.create({
+      data: {
+        userId: simUserId,
+        pickupLocationName, dropoffLocationName,
+        pickupLat, pickupLng, dropoffLat, dropoffLng,
+        flexTimeStart: new Date(), flexTimeEnd: new Date(Date.now() + 3600000),
+        vehicleType,
+      }
+    })
+    // Trigger matching
+    const results = await matchPendingRides(vehicleType, false)
+    const matchedPool = results.find(r => r.pool && (r.pool as any).id)
+    return res.status(201).json({ rider: { id: simUserId, name, email: simEmail }, ride, poolId: matchedPool ? (matchedPool.pool as any).id : null, matched: results.length > 0 })
+  }
+
+  // Mock fallback
+  mockStore.users.push({ id: simUserId, email: simEmail, name, rollNumber: null, emergencyContact: null, createdAt: new Date() })
+  const ride: MockRideRequest = {
+    id: mockStore.nextId(), userId: simUserId,
+    pickupLocationName, dropoffLocationName,
+    pickupLat, pickupLng, dropoffLat, dropoffLng,
+    flexTimeStart: new Date(), flexTimeEnd: new Date(Date.now() + 3600000),
+    vehicleType, status: 'PENDING', createdAt: new Date(),
+  }
+  mockStore.rideRequests.push(ride)
+  // Trigger matching (with requireMultiple=false so even 1+1 matches)
+  const results = await matchPendingRides(vehicleType, false)
+  return res.status(201).json({ rider: { id: simUserId, name, email: simEmail }, ride, matched: results.length > 0 })
 })
 
 router.delete('/pools/active/:userId', async (req: Request, res: Response) => {
@@ -379,6 +443,10 @@ router.post('/uber/mock-dispatch', async (req: Request, res: Response) => {
     }
   }
   return res.json(trip)
+})
+router.get('/uber/mock-drivers/:vehicleType', (req: Request, res: Response) => {
+  const vehicleType = req.params.vehicleType === 'CAB_4' ? 'CAB_4' : 'AUTO_3'
+  return res.json({ drivers: getMockDrivers(vehicleType) })
 })
 router.post('/safety/trigger-sos', (req: Request, res: Response) => res.json({ dispatched: true, channels: ['SMS', 'Call'], latitude: bodyNumber(req.body.latitude), longitude: bodyNumber(req.body.longitude) }))
 

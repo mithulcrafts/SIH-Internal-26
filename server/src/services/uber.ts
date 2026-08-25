@@ -11,6 +11,25 @@ let cachedToken: { value: string; expiresAt: number } | null = null
 
 export const isUberEnabled = (): boolean => Boolean(CLIENT_ID && CLIENT_SECRET)
 
+const MOCK_AUTO_DRIVERS = [
+  { id: 'drv-auto-1', name: 'Ramesh Sharma', vehicle: 'Bajaj RE Auto', vehicleNumber: 'MP-07-AB-1234', phone: '+91 98765 43210', rating: 4.8, eta: 4, trips: 1283 },
+  { id: 'drv-auto-2', name: 'Suresh Kumar', vehicle: 'TVS King Auto', vehicleNumber: 'MP-07-CD-5678', phone: '+91 91234 56789', rating: 4.9, eta: 6, trips: 2104 },
+  { id: 'drv-auto-3', name: 'Dinesh Yadav', vehicle: 'Bajaj RE Auto', vehicleNumber: 'MP-07-JK-7890', phone: '+91 93456 78901', rating: 4.6, eta: 3, trips: 876 },
+  { id: 'drv-auto-4', name: 'Mahesh Verma', vehicle: 'Piaggio Ape Auto', vehicleNumber: 'MP-07-LM-2345', phone: '+91 94567 89012', rating: 4.7, eta: 8, trips: 1547 },
+]
+
+const MOCK_CAB_DRIVERS = [
+  { id: 'drv-cab-1', name: 'Vikram Singh', vehicle: 'White Swift Dzire', vehicleNumber: 'MP-07-EF-9012', phone: '+91 99887 76655', rating: 4.7, eta: 5, trips: 3201 },
+  { id: 'drv-cab-2', name: 'Amit Patel', vehicle: 'White Maruti WagonR', vehicleNumber: 'MP-07-GH-3456', phone: '+91 98765 12345', rating: 4.9, eta: 7, trips: 4567 },
+  { id: 'drv-cab-3', name: 'Rajesh Tiwari', vehicle: 'Silver Honda Amaze', vehicleNumber: 'MP-07-NP-6789', phone: '+91 95678 90123', rating: 4.5, eta: 4, trips: 2890 },
+  { id: 'drv-cab-4', name: 'Karan Malhotra', vehicle: 'White Hyundai Xcent', vehicleNumber: 'MP-07-QR-0123', phone: '+91 96789 01234', rating: 4.8, eta: 9, trips: 1932 },
+]
+
+/** Return the full list of mock drivers for a vehicle type. */
+export function getMockDrivers(vehicleType: string) {
+  return vehicleType === 'AUTO_3' ? MOCK_AUTO_DRIVERS : MOCK_CAB_DRIVERS
+}
+
 /** Obtain (or return cached) OAuth 2.0 client credentials token. */
 export async function getAccessToken(): Promise<string | null> {
   if (!isUberEnabled()) return null
@@ -46,16 +65,7 @@ export async function dispatchTrip(params: {
   dropoffLng: number
   vehicleType?: string
 }): Promise<{ driver: Record<string, unknown>; trackingUrl: string }> {
-  const autoDrivers = [
-    { name: 'Ramesh Sharma', vehicle: 'Bajaj RE Auto', vehicleNumber: 'MP-07-AB-1234', phone: '+91 98765 43210', rating: 4.8 },
-    { name: 'Suresh Kumar', vehicle: 'TVS King Auto', vehicleNumber: 'MP-07-CD-5678', phone: '+91 91234 56789', rating: 4.9 },
-  ]
-  const cabDrivers = [
-    { name: 'Vikram Singh', vehicle: 'White Swift Dzire', vehicleNumber: 'MP-07-EF-9012', phone: '+91 99887 76655', rating: 4.7 },
-    { name: 'Amit Patel', vehicle: 'White Maruti WagonR', vehicleNumber: 'MP-07-GH-3456', phone: '+91 98765 12345', rating: 4.9 },
-  ]
-
-  const driverList = params.vehicleType === 'AUTO_3' ? autoDrivers : cabDrivers
+  const driverList = params.vehicleType === 'AUTO_3' ? MOCK_AUTO_DRIVERS : MOCK_CAB_DRIVERS
   const mockDriver = driverList[Math.floor(Math.random() * driverList.length)]
 
   if (!isUberEnabled()) {

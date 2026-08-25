@@ -362,6 +362,8 @@ function App() {
           <TrackingView
             pickup={pickup}
             dropoff={dropoff}
+            vehicle={vehicle}
+            fare={fare}
             distance={realDistance}
             time={realTime}
             sosSent={sosSent}
@@ -1177,21 +1179,43 @@ function PoolView({
   const [splitModalOpen, setSplitModalOpen] = useState(false);
   const [noActiveRides, setNoActiveRides] = useState(false);
 
+  // Simulate rider state
+  const [showSimPanel, setShowSimPanel] = useState(false);
+  const [simName, setSimName] = useState("");
+  const [simDestination, setSimDestination] = useState("Gwalior Railway Station");
+  const [simVehicle, setSimVehicle] = useState<Vehicle>(vehicle || "AUTO_3");
+  const [simulating, setSimulating] = useState(false);
+  const [simulatedRiders, setSimulatedRiders] = useState<{ name: string; destination: string; matched: boolean }[]>([]);
+
+  const token = localStorage.getItem("token") || `demo-user`;
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+  const DESTINATIONS: { name: string; lat: number; lng: number }[] = [
+    { name: "Gwalior Railway Station", lat: 26.2183, lng: 78.1828 },
+    { name: "DD Mall", lat: 26.2095, lng: 78.1630 },
+    { name: "Maharaj Bada", lat: 26.2151, lng: 78.1768 },
+    { name: "Airport", lat: 26.2332, lng: 78.2278 },
+    { name: "MITS / JIET", lat: 26.2100, lng: 78.1900 },
+  ];
+
   useEffect(() => {
-    const token = localStorage.getItem("token") || `demo-user`;
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-    
     const fetchPool = () => {
       fetch(`${apiUrl}/api/pools/active/${token}`)
         .then((res) => res.json())
         .then((data) => {
-          if (data.pool) setActivePool(data.pool);
-          if (data.members) setRealMembers(data.members);
+          if (data.pool) {
+            setActivePool(data.pool);
+            setNoActiveRides(false);
+          }
+          if (data.members && data.members.length > 0) {
+            setRealMembers(data.members);
+            setNoActiveRides(false);
+          }
           if (data.error === "No active pool found") {
             setNoActiveRides(true);
           }
         })
-        .catch(console.error);
+        .catch(() => setNoActiveRides(true));
     };
 
     fetchPool();
@@ -1199,37 +1223,190 @@ function PoolView({
     return () => clearInterval(interval);
   }, []);
 
+  const handleSimulateRider = async () => {
+    if (!simName.trim()) return;
+    setSimulating(true);
+    const dest = DESTINATIONS.find((d) => d.name === simDestination) || DESTINATIONS[0];
+    try {
+      const res = await fetch(`${apiUrl}/api/simulate/rider`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: simName.trim(),
+          pickupLocationName: pickup.name || "IIITM Main Gate",
+          dropoffLocationName: dest.name,
+          pickupLat: pickup.lat || 26.2485,
+          pickupLng: pickup.lng || 78.1735,
+          dropoffLat: dest.lat,
+          dropoffLng: dest.lng,
+          vehicleType: simVehicle,
+        }),
+      });
+      const data = await res.json();
+      setSimulatedRiders((prev) => [...prev, { name: simName.trim(), destination: dest.name, matched: data.matched }]);
+      setSimName("");
+    } catch (e) {
+      console.error(e);
+    }
+    setSimulating(false);
+  };
+
+  // Also ensure current user has a ride request
+  const ensureUserHasRideRequest = async () => {
+    const dest = DESTINATIONS.find((d) => d.name === (dropoff.name || "Gwalior Railway Station")) || DESTINATIONS[0];
+    try {
+      await fetch(`${apiUrl}/api/rides/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: token,
+          pickupLocationName: pickup.name || "IIITM Main Gate",
+          dropoffLocationName: dest.name,
+          pickupLat: pickup.lat || 26.2485,
+          pickupLng: pickup.lng || 78.1735,
+          dropoffLat: dest.lat,
+          dropoffLng: dest.lng,
+          flexTimeStart: new Date().toISOString(),
+          flexTimeEnd: new Date(Date.now() + 3600000).toISOString(),
+          vehicleType: simVehicle,
+        }),
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const poolIdPrefix = activePool?.id
     ? activePool.id.replace(/-/g, "").substring(0, 4).toUpperCase()
-    : "4821";
-  const displayMembers = realMembers.map((m) => ({
+    : "----";
+
+  const displayMembers = realMembers.map((m, i) => ({
     name: m.user?.name || "Rider",
     initials: (m.user?.name || "Rider").substring(0, 2).toUpperCase(),
-    color: m.userId === localStorage.getItem("token") ? "navy" : "green",
+    color: m.userId === token ? "navy" : i % 2 === 0 ? "green" : "gold",
     paid: m.paymentStatus === "PAID",
     stop: m.stopSequence,
     userId: m.userId,
     individualFare: m.individualFare,
-    distanceKm: m.distanceKm || 0
+    distanceKm: m.distanceKm || 0,
   }));
 
-  const myMember = realMembers.find(m => m.userId === (localStorage.getItem("token") || `demo-user`));
-  const estimatedShare = myMember?.individualFare > 0 ? myMember.individualFare : fare;
+  const maxSeats = (activePool?.vehicleType === "CAB_4" || vehicle === "CAB_4") ? 4 : 3;
+  const myMember = realMembers.find((m) => m.userId === token);
+  const estimatedShare = (myMember?.individualFare ?? 0) > 0 ? myMember!.individualFare : fare;
 
+  const currentPickup: Location = pickup.name ? pickup : { name: "IIITM Main Gate", lat: 26.2485, lng: 78.1735 };
+  const currentDropoff: Location = dropoff.name ? dropoff : { name: "Gwalior Railway Station", lat: 26.2183, lng: 78.1828 };
+  const currentVehicle = activePool?.vehicleType || vehicle || "AUTO_3";
+  const currentDistance = distance || "8.4";
+  const currentTime = time || 22;
+
+  // ── No active rides: show "Book & Simulate" panel ──
   if (noActiveRides) {
     return (
-      <div className="pool-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '60vh', textAlign: 'center', padding: '24px' }}>
-        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>No active rides</h2>
-        <p style={{ color: '#64748B', marginBottom: '32px' }}>You aren't currently part of any active CampusPool ride.</p>
-        <button className="primary-button" onClick={() => {
-          localStorage.setItem("campuspool-stage", "home");
-          window.location.href = "/";
-        }}>
-          Book a new ride
-        </button>
+      <div className="pool-view">
+        <div className="pool-top">
+          <div>
+            <p className="eyebrow">MY RIDES</p>
+            <h2>No active pool yet</h2>
+          </div>
+        </div>
+
+        <section className="tracking-section" style={{ marginBottom: '16px', textAlign: 'center', padding: '24px' }}>
+          <p style={{ color: '#64748B', marginBottom: '16px', fontSize: '14px' }}>
+            You need at least 2 riders going the same direction to form a pool. Book your ride first, then simulate other riders to create a pool.
+          </p>
+          <button className="primary-button" onClick={async () => { await ensureUserHasRideRequest(); setShowSimPanel(true); }} style={{ marginBottom: '16px' }}>
+            <LocateFixed size={16} /> Book my ride & add co-riders
+          </button>
+        </section>
+
+        {/* Simulate Rider Panel */}
+        {showSimPanel && (
+          <section className="tracking-section" style={{ marginBottom: '16px' }}>
+            <div className="tracking-section-header">
+              <h3><Users size={16} /> Simulate Another Rider</h3>
+              <span className="tracking-badge">{simulatedRiders.length} added</span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#64748B', marginBottom: '12px' }}>
+              Add riders manually to simulate real pool matching. Each rider creates a real ride request and triggers the matching engine.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <input
+                type="text"
+                placeholder="Rider name (e.g. Ananya Sharma)"
+                value={simName}
+                onChange={(e) => setSimName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSimulateRider()}
+                style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '14px', outline: 'none' }}
+              />
+              <select
+                value={simDestination}
+                onChange={(e) => setSimDestination(e.target.value)}
+                style={{ padding: '12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: '#fff' }}
+              >
+                {DESTINATIONS.map((d) => (
+                  <option key={d.name} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className={simVehicle === 'AUTO_3' ? 'primary-button' : 'share-button'}
+                  onClick={() => setSimVehicle('AUTO_3')}
+                  style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+                >
+                  Auto (3 seats)
+                </button>
+                <button
+                  className={simVehicle === 'CAB_4' ? 'primary-button' : 'share-button'}
+                  onClick={() => setSimVehicle('CAB_4')}
+                  style={{ flex: 1, padding: '10px', fontSize: '13px' }}
+                >
+                  Cab (4 seats)
+                </button>
+              </div>
+              <button
+                className="primary-button wide"
+                onClick={handleSimulateRider}
+                disabled={simulating || !simName.trim()}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              >
+                {simulating ? "Adding rider..." : <><Users size={16} /> Add Rider & Match</>}
+              </button>
+            </div>
+
+            {/* Simulated riders list */}
+            {simulatedRiders.length > 0 && (
+              <div style={{ marginTop: '16px' }}>
+                <small style={{ color: '#64748B', fontWeight: 600 }}>SIMULATED RIDERS</small>
+                {simulatedRiders.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', borderBottom: '1px solid #F1F5F9' }}>
+                    <span className={`member-avatar color-${(i % 5) + 1}`} style={{ width: '32px', height: '32px', fontSize: '12px' }}>
+                      {r.name.substring(0, 2).toUpperCase()}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: '14px', display: 'block' }}>{r.name}</strong>
+                      <small style={{ color: '#94A3B8' }}>→ {r.destination}</small>
+                    </div>
+                    <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', background: r.matched ? '#DCFCE7' : '#FEF3C7', color: r.matched ? '#16A34A' : '#D97706', fontWeight: 600 }}>
+                      {r.matched ? "Matched!" : "Waiting"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </div>
     );
   }
+
+  // ── Active pool found: show full ride details ──
+  const driverInfo = activePool?.driverDetails
+    ? typeof activePool.driverDetails === "string"
+      ? JSON.parse(activePool.driverDetails)
+      : activePool.driverDetails
+    : null;
 
   return (
     <div className="pool-view">
@@ -1240,132 +1417,136 @@ function PoolView({
         </div>
         <div className="matched-chip">
           <span />
-          <strong>
-            {displayMembers.length}/{vehicle === "CAB_4" ? 4 : 3}
-          </strong>
+          <strong>{displayMembers.length}/{maxSeats}</strong>
           <small>Matched</small>
         </div>
       </div>
+
+      {/* Route Card with Map */}
       <div className="route-card">
         <div className="route-summary">
           <div>
             <span className="route-point navy" />
-            <strong>{pickup.name}</strong>
+            <strong>{currentPickup.name}</strong>
           </div>
-          <span className="route-time">ETA: 2m</span>
+          <span className="route-time">Pickup</span>
           <div className="route-rule" />
           <div>
             <span className="route-point gold" />
-            <strong>{dropoff.name}</strong>
+            <strong>{currentDropoff.name}</strong>
           </div>
-          <span className="route-time">{time}m trip</span>
+          <span className="route-time">{currentTime}m trip</span>
         </div>
-        <div
-          style={{
-            width: "100%",
-            height: "140px",
-            marginTop: "16px",
-            borderRadius: "12px",
-            overflow: "hidden",
-          }}
-        >
-          <InteractiveMap
-            pickup={pickup}
-            dropoff={dropoff}
-            onMapClick={() => {}}
-          />
+        <div style={{ width: "100%", height: "200px", marginTop: "16px", borderRadius: "12px", overflow: "hidden", position: "relative" }}>
+          <InteractiveMap pickup={currentPickup} dropoff={currentDropoff} onMapClick={() => {}} />
+          <div style={{ position: 'absolute', top: '12px', left: '12px', display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 5 }}>
+            {displayMembers.map((m, i) => (
+              <div key={`marker-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.92)', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 600, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: m.userId === token ? '#1E4E8C' : '#22C55E' }} />
+                {m.name.split(' ')[0]} · Stop {m.stop}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Trip Info */}
       <div className="pool-info-row">
-        <span>
-          <Users size={17} /> {vehicle === "AUTO_3" ? "Auto" : "Cab"} ·{" "}
-          {vehicle === "CAB_4" ? 4 : 3} seats
-        </span>
-        <span>
-          <Clock3 size={17} /> {time} min
-        </span>
-        <span>
-          <Navigation size={17} />{" "}
-          {distance} km
-        </span>
+        <span><Users size={17} /> {currentVehicle === "AUTO_3" ? "Auto" : "Cab"} · {maxSeats} seats</span>
+        <span><Clock3 size={17} /> {currentTime} min</span>
+        <span><Navigation size={17} /> {currentDistance} km</span>
       </div>
-      <section className="member-card">
-        <div className="card-title">
-          <h3>Your crew</h3>
-          <button onClick={() => setChatOpen(true)}>
-            <MessageCircle size={16} /> Chat
+
+      {/* Driver Info */}
+      {driverInfo && (
+        <section className="tracking-section" style={{ marginBottom: '12px' }}>
+          <div className="tracking-section-header">
+            <h3>🚗 Your Driver</h3>
+            <span className="tracking-badge live">Confirmed</span>
+          </div>
+          <div className="driver-card">
+            <span className="driver-avatar">{driverInfo.name?.split(" ").map((n: string) => n[0]).join("")}</span>
+            <div className="driver-info">
+              <strong>{driverInfo.name}</strong>
+              <span><Star size={14} fill="#D99B26" /> {driverInfo.rating} · {currentVehicle === 'AUTO_3' ? 'Uber Auto' : 'Uber Go'}</span>
+              <small>{driverInfo.vehicleNumber} · {driverInfo.vehicle}</small>
+            </div>
+            <a href={`tel:${driverInfo.phone}`} className="call-button" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Phone size={18} />
+            </a>
+          </div>
+        </section>
+      )}
+
+      {/* Co-Riders */}
+      <section className="tracking-section">
+        <div className="tracking-section-header">
+          <h3><Users size={16} /> Your Crew ({displayMembers.length}/{maxSeats})</h3>
+          <button onClick={() => setChatOpen(true)} style={{ background: 'none', border: 'none', color: '#3B82F6', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 600 }}>
+            <MessageCircle size={14} /> Chat
           </button>
         </div>
-        {displayMembers.map((member) => (
-          <div className="member-row" key={member.name}>
-            <span className={`member-avatar ${member.color}`}>
-              {member.initials}
-            </span>
-            <div>
-              <strong>
-                {member.name}{" "}
-                {member.userId === localStorage.getItem("token") && "(You)"}
-              </strong>
-              <small>
-                Stop {member.stop} ·{" "}
-                {member.stop === 1
-                  ? pickup.name
-                  : member.stop === 3
-                    ? "GH"
-                    : "Main Gate"}
-              </small>
+        <div className="co-riders-list">
+          {displayMembers.map((member, i) => (
+            <div className={`co-rider-card ${member.userId === token ? 'is-me' : ''}`} key={member.userId || i}>
+              <span className={`member-avatar ${member.color}`}>{member.initials}</span>
+              <div className="co-rider-info">
+                <strong>{member.name} {member.userId === token && <span className="you-badge">You</span>}</strong>
+                <small>Stop {member.stop} · {member.distanceKm > 0 ? member.distanceKm.toFixed(1) + ' km' : 'Calculating...'}</small>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <strong style={{ display: 'block', fontSize: '14px', color: '#0F172A' }}>{member.individualFare > 0 ? `₹${member.individualFare}` : '—'}</strong>
+                <span className={member.paid || paid ? "paid-status" : "pending-status"} style={{ fontSize: '11px' }}>
+                  {member.paid || paid ? (<><Check size={11} /> Paid</>) : "Pending"}
+                </span>
+              </div>
             </div>
-            <span
-              className={member.paid || paid ? "paid-status" : "pending-status"}
-            >
-              {member.paid || paid ? (
-                <>
-                  <Check size={13} /> Paid
-                </>
-              ) : (
-                "Pending"
-              )}
-            </span>
-          </div>
-        ))}
+          ))}
+          {Array.from({ length: Math.max(0, maxSeats - displayMembers.length) }).map((_, i) => (
+            <div className="co-rider-card empty-seat" key={`empty-${i}`}>
+              <span className="member-avatar empty">?</span>
+              <div className="co-rider-info">
+                <strong>Waiting for rider...</strong>
+                <small>Open seat #{displayMembers.length + i + 1}</small>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
-      <section className="payment-card">
-        <div className="payment-top">
+
+      {/* Fare & Payment */}
+      <section className="tracking-section fare-summary-card">
+        <div className="fare-summary-top">
           <div>
             <p className="eyebrow">YOUR ESTIMATED SHARE</p>
-            <h2>₹{paid ? estimatedShare : estimatedShare}</h2>
+            <h2>₹{estimatedShare}</h2>
           </div>
           <button className="split-badge" onClick={() => setSplitModalOpen(true)} style={{ border: 'none', background: '#F3F4F6', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#4B5563' }}>
-            <WalletCards size={15} /> Distance split
+            <WalletCards size={15} /> View Breakdown
           </button>
         </div>
-        <div className="payment-bar">
+        <div className="fare-detail-row">
+          <span><Navigation size={14} /> {currentDistance} km</span>
+          <span><Clock3 size={14} /> {currentTime} min</span>
+          <span><Users size={14} /> {displayMembers.length} rider{displayMembers.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="fare-note">
+          <small>Total pool fare: ₹{activePool?.totalEstimatedFare || fare} · Split by distance · Fare may vary ±₹8</small>
+        </div>
+        <div className="payment-bar" style={{ marginTop: '12px' }}>
           <span style={{ width: paid ? "100%" : "66%" }} />
         </div>
-        <div className="payment-foot">
-          <span>Your share will be collected after the trip</span>
-          <span>Fare may vary ±₹8</span>
-        </div>
-        <button className="primary-button wide" style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={onTrack}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" opacity="0"/></svg>
-          Book Uber
+        <button className="primary-button wide" style={{ backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px' }} onClick={onTrack}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#fff"/><text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" fill="#000" fontSize="7" fontWeight="700" fontFamily="sans-serif">Uber</text></svg>
+          Book Uber · Track Ride
         </button>
       </section>
+
       {chatOpen && (
-        <ChatDrawer
-          messages={messages}
-          message={message}
-          setMessage={setMessage}
-          sendMessage={sendMessage}
-          onClose={() => setChatOpen(false)}
-        />
+        <ChatDrawer messages={messages} message={message} setMessage={setMessage} sendMessage={sendMessage} onClose={() => setChatOpen(false)} />
       )}
       {splitModalOpen && (
-        <DistanceSplitModal
-          members={displayMembers}
-          totalFare={activePool?.totalEstimatedFare || (vehicle === "AUTO_3" ? 60 : 92)}
-          onClose={() => setSplitModalOpen(false)}
-        />
+        <DistanceSplitModal members={displayMembers} totalFare={activePool?.totalEstimatedFare || fare} onClose={() => setSplitModalOpen(false)} />
       )}
     </div>
   );
@@ -1430,6 +1611,8 @@ function ChatDrawer({
 function TrackingView({
   pickup,
   dropoff,
+  vehicle,
+  fare,
   distance,
   time,
   sosSent,
@@ -1439,6 +1622,8 @@ function TrackingView({
 }: {
   pickup: Location;
   dropoff: Location;
+  vehicle: Vehicle;
+  fare: number;
   distance: string;
   time: number;
   sosSent: boolean;
@@ -1452,14 +1637,28 @@ function TrackingView({
   const [tripEnded, setTripEnded] = useState(false);
   const [amountDue, setAmountDue] = useState<number>(0);
   const [paying, setPaying] = useState(false);
-  const [dispatchFailed, setDispatchFailed] = useState(false);
   const [poolData, setPoolData] = useState<any>(null);
   const [fareBreakdown, setFareBreakdown] = useState<any>(null);
 
+  // Driver selection state
+  const [driverList, setDriverList] = useState<any[]>([]);
+  const [showDriverPicker, setShowDriverPicker] = useState(false);
+  const [uberRedirecting, setUberRedirecting] = useState(false);
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{ name: string; text: string; time: string; isOwn?: boolean }[]>([]);
+  const [chatMessage, setChatMessage] = useState("");
+
+  // Fare split modal
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
+
+  const token = localStorage.getItem("token") || `demo-user`;
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
+
+  // Fetch pool data
   useEffect(() => {
-    const token = localStorage.getItem("token") || `demo-user`;
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-    
     fetch(`${apiUrl}/api/pools/active/${token}`)
       .then((res) => res.json())
       .then((data) => {
@@ -1469,99 +1668,166 @@ function TrackingView({
           setDriverInfo({ driver: parsedDriver, etaMinutes: time, distanceKm: distance, poolId: data.pool.id });
         }
       })
-      .catch((err) => {
-        console.error(err);
-      });
+      .catch(console.error);
   }, [pickup, dropoff, time, distance]);
 
-  const handleDispatch = (pid: string) => {
-    setDispatchFailed(false);
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-    fetch(`${apiUrl}/api/uber/mock-dispatch`, {
+  // Fetch mock drivers list
+  useEffect(() => {
+    fetch(`${apiUrl}/api/uber/mock-drivers/${vehicle}`)
+      .then((res) => res.json())
+      .then((data) => setDriverList(data.drivers || []))
+      .catch(console.error);
+  }, [vehicle]);
+
+  // Poll chat messages from backend
+  useEffect(() => {
+    const poolId = poolData?.pool?.id;
+    if (!poolId) return;
+
+    const fetchChat = () => {
+      fetch(`${apiUrl}/api/chat/${poolId}`)
+        .then((res) => res.json())
+        .then((msgs: any[]) => {
+          if (Array.isArray(msgs)) {
+            setChatMessages(msgs.map((m) => ({
+              name: m.user?.name || m.userId?.split("-")[0] || "Rider",
+              text: m.text,
+              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              isOwn: m.userId === token,
+            })));
+          }
+        })
+        .catch(console.error);
+    };
+
+    fetchChat();
+    const interval = setInterval(fetchChat, 3000);
+    return () => clearInterval(interval);
+  }, [poolData?.pool?.id]);
+
+  // Send chat message to backend
+  const sendChatMessage = () => {
+    if (!chatMessage.trim()) return;
+    const poolId = poolData?.pool?.id;
+    if (!poolId) {
+      setChatMessages((prev) => [...prev, { name: "You", text: chatMessage.trim(), time: "now", isOwn: true }]);
+      setChatMessage("");
+      return;
+    }
+    fetch(`${apiUrl}/api/chat/${poolId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        poolId: pid,
-        pickupLat: pickup.lat,
-        pickupLng: pickup.lng,
-        dropoffLat: dropoff.lat,
-        dropoffLng: dropoff.lng,
-      }),
+      body: JSON.stringify({ userId: token, text: chatMessage.trim() }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error("Dispatch failed");
-        return res.json();
+      .then((res) => res.json())
+      .then(() => {
+        setChatMessage("");
+        // Immediately fetch updated messages
+        fetch(`${apiUrl}/api/chat/${poolId}`)
+          .then((res) => res.json())
+          .then((msgs: any[]) => {
+            if (Array.isArray(msgs)) {
+              setChatMessages(msgs.map((m) => ({
+                name: m.user?.name || m.userId?.split("-")[0] || "Rider",
+                text: m.text,
+                time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                isOwn: m.userId === token,
+              })));
+            }
+          });
       })
-      .then((dispatchData) => {
-        setDriverInfo({ ...dispatchData, poolId: pid });
-        setDispatchFailed(false);
-      })
-      .catch((err) => {
-        console.error(err);
-        setDispatchFailed(true);
-      });
+      .catch(console.error);
   };
 
-  // Live ETA countdown simulation
+  // Handle driver selection → Uber redirect animation → dispatch
+  const handleSelectDriver = (driver: any) => {
+    setSelectedDriverId(driver.id);
+    setUberRedirecting(true);
+
+    // Simulate Uber redirect delay
+    setTimeout(() => {
+      const poolId = poolData?.pool?.id || "demo-pool-id";
+      fetch(`${apiUrl}/api/uber/mock-dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          poolId,
+          pickupLat: pickup.lat,
+          pickupLng: pickup.lng,
+          dropoffLat: dropoff.lat,
+          dropoffLng: dropoff.lng,
+        }),
+      })
+        .then((res) => res.json())
+        .then((dispatchData) => {
+          // Override with the selected driver's data
+          setDriverInfo({
+            driver: { ...dispatchData.driver, ...driver },
+            poolId,
+            etaMinutes: driver.eta || time,
+            distanceKm: distance,
+          });
+          setUberRedirecting(false);
+          setShowDriverPicker(false);
+        })
+        .catch((err) => {
+          console.error(err);
+          setUberRedirecting(false);
+        });
+    }, 2500);
+  };
+
+  // Live ETA countdown
   useEffect(() => {
     if (!driverInfo || tripEnded) return;
     const interval = setInterval(() => {
-      setLiveEta(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          setTripEnded(true);
-          return 0;
-        }
+      setLiveEta((prev) => {
+        if (prev <= 1) { clearInterval(interval); setTripEnded(true); return 0; }
         return prev - 1;
       });
-      setLiveDistance(prev => Math.max(0.1, prev - (prev * 0.1)));
-    }, 60000); // Decrement every minute
+      setLiveDistance((prev) => Math.max(0.1, prev - prev * 0.1));
+    }, 60000);
     return () => clearInterval(interval);
   }, [driverInfo, tripEnded]);
 
-  // Fetch individual fare when trip ends
+  // Fetch fare when trip ends
   useEffect(() => {
     const pId = driverInfo?.poolId || poolData?.pool?.id;
     if (tripEnded && pId) {
-      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-      const token = localStorage.getItem("token") || `demo-user`;
-      const actualFare = (poolData?.pool?.vehicleType === 'AUTO_3' || poolData?.pool?.vehicleType !== 'CAB_4') ? 68 : 92;
+      const actualFare = vehicle === 'CAB_4' ? 92 : 68;
       const distKm = parseFloat(distance) || liveDistance;
-      const perKmRate = 12; // ₹12 per km
+      const perKmRate = 12;
       const computedFare = Math.round(distKm * perKmRate + actualFare);
-      fetch(`${apiUrl}/api/pools/${pId}/split`, { 
+      fetch(`${apiUrl}/api/pools/${pId}/split`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: token, totalFare: computedFare, distanceKm: distKm })
+        body: JSON.stringify({ userId: token, totalFare: computedFare, distanceKm: distKm }),
       })
-        .then(res => res.json())
-        .then(data => {
-           setFareBreakdown(data);
-           const myShare = data.shares.find((s: any) => s.riderId === token);
-           if (myShare) setAmountDue(myShare.individualFare);
+        .then((res) => res.json())
+        .then((data) => {
+          setFareBreakdown(data);
+          const myShare = data.shares.find((s: any) => s.riderId === token);
+          if (myShare) setAmountDue(myShare.individualFare);
         })
         .catch(console.error);
     }
   }, [tripEnded, driverInfo, poolData]);
 
   const eta = driverInfo?.etaMinutes ? Math.min(driverInfo.etaMinutes, liveEta) : liveEta;
-  const driverName = driverInfo?.driver?.name || "Assigning...";
-  const driverVehicle = driverInfo?.driver?.vehicle || "Finding nearby vehicle";
-  const driverPlate = driverInfo?.driver?.vehicleNumber || "...";
+  const driverName = driverInfo?.driver?.name || "No driver assigned";
+  const driverVehicle = driverInfo?.driver?.vehicle || "";
+  const driverPlate = driverInfo?.driver?.vehicleNumber || "";
   const driverPhone = driverInfo?.driver?.phone || "";
-  const driverRating = driverInfo?.driver?.rating || 5.0;
+  const driverRating = driverInfo?.driver?.rating || 0;
   const displayDistance = liveDistance.toFixed(1) + " km";
-  const initials = driverName
-    .split(" ")
-    .map((n: string) => n[0])
-    .join("");
+
+  const poolMembers = poolData?.members || [];
+  const maxCapacity = vehicle === "CAB_4" ? 4 : 3;
+  const myMember = poolMembers.find((m: any) => m.userId === token);
+  const estimatedShare = myMember?.individualFare > 0 ? myMember.individualFare : fare;
 
   const handleCancel = () => {
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-    const token = localStorage.getItem("token") || `demo-user`;
-    // Cancel ride request on backend
     fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error);
-    // Cancel pool membership on backend
     fetch(`${apiUrl}/api/pools/active/${token}`, { method: 'DELETE' }).catch(console.error);
     localStorage.setItem("campuspool-stage", "home");
     window.location.href = "/";
@@ -1569,21 +1835,14 @@ function TrackingView({
 
   const handlePay = async () => {
     setPaying(true);
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
     try {
-      const res = await fetch(`${apiUrl}/api/payments/mock-order`, {
+      await fetch(`${apiUrl}/api/payments/mock-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: amountDue })
-      });
-      await res.json();
-      
-      // Mark ride as complete on backend
-      const token = localStorage.getItem("token") || `demo-user`;
+        body: JSON.stringify({ amount: amountDue }),
+      }).then((r) => r.json());
       fetch(`${apiUrl}/api/pools/active/${token}/complete`, { method: 'POST' }).catch(console.error);
       fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error);
-
-      // Simulate Razorpay UI delay
       setTimeout(() => {
         alert("Payment Successful! Mock Razorpay flow completed.");
         localStorage.setItem("campuspool-stage", "home");
@@ -1595,6 +1854,26 @@ function TrackingView({
     }
   };
 
+  // === UBER REDIRECT OVERLAY ===
+  if (uberRedirecting) {
+    return (
+      <div className="uber-redirect-overlay">
+        <div className="uber-redirect-content">
+          <div className="uber-logo-animated">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#000"/><text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="8" fontWeight="700" fontFamily="sans-serif">Uber</text></svg>
+          </div>
+          <h2>Redirecting to Uber...</h2>
+          <p>CampusPool is booking your shared ride through Uber</p>
+          <div className="uber-redirect-progress">
+            <span />
+          </div>
+          <small>Connecting to driver {driverList.find((d) => d.id === selectedDriverId)?.name || ""}...</small>
+        </div>
+      </div>
+    );
+  }
+
+  // === TRIP ENDED VIEW ===
   if (tripEnded) {
     return (
       <div className="tracking-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '24px' }}>
@@ -1603,7 +1882,7 @@ function TrackingView({
         </div>
         <h2>Trip Completed!</h2>
         <p style={{ color: '#64748B', marginBottom: '32px' }}>Hope you had a safe journey back to {dropoff.name.split(" ")[0]}.</p>
-        
+
         <div style={{ background: '#F8FAFC', padding: '24px', borderRadius: '16px', width: '100%', marginBottom: '24px', border: '1px solid #E2E8F0' }}>
           <small style={{ color: '#64748B', fontWeight: 600 }}>YOUR SHARE</small>
           <h1 style={{ fontSize: '48px', color: '#0F172A', margin: '8px 0' }}>₹{amountDue.toFixed(2)}</h1>
@@ -1620,8 +1899,8 @@ function TrackingView({
               {fareBreakdown.shares.map((s: any, i: number) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 16px', fontSize: '14px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontWeight: s.riderId === (localStorage.getItem("token") || 'demo-user') ? 700 : 400, color: '#0F172A' }}>
-                      {s.riderId === (localStorage.getItem("token") || 'demo-user') ? 'You' : s.riderId.split('_')[0].toUpperCase() + '...' + s.riderId.slice(-3)}
+                    <span style={{ fontWeight: s.riderId === token ? 700 : 400, color: '#0F172A' }}>
+                      {s.riderId === token ? 'You' : s.riderId.split('_')[0].toUpperCase() + '...' + s.riderId.slice(-3)}
                     </span>
                     <span style={{ color: '#64748B', fontSize: '12px' }}>{s.distanceKm.toFixed(1)} km traveled</span>
                   </div>
@@ -1632,211 +1911,267 @@ function TrackingView({
           </div>
         )}
 
-        <button 
-          className="button"
-          onClick={handlePay}
-          disabled={paying || amountDue === 0}
-          style={{ width: '100%', padding: '16px', fontSize: '16px', marginBottom: '12px' }}
-        >
+        <button className="button" onClick={handlePay} disabled={paying || amountDue === 0} style={{ width: '100%', padding: '16px', fontSize: '16px', marginBottom: '12px' }}>
           {paying ? "Processing..." : "Pay with Razorpay"}
         </button>
-
-        <button 
-          onClick={() => {
-            // Mark ride as complete on backend
-            const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:4000";
-            const token = localStorage.getItem("token") || `demo-user`;
-            fetch(`${apiUrl}/api/pools/active/${token}/complete`, { method: 'POST' }).catch(console.error);
-            fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error);
-            localStorage.setItem("campuspool-stage", "home");
-            window.location.href = "/";
-          }}
-          style={{ background: 'transparent', border: 'none', color: '#64748B', fontWeight: 600, cursor: 'pointer', fontSize: '14px', width: '100%', padding: '12px' }}
-        >
+        <button onClick={() => { fetch(`${apiUrl}/api/pools/active/${token}/complete`, { method: 'POST' }).catch(console.error); fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error); localStorage.setItem("campuspool-stage", "home"); window.location.href = "/"; }} style={{ background: 'transparent', border: 'none', color: '#64748B', fontWeight: 600, cursor: 'pointer', fontSize: '14px', width: '100%', padding: '12px' }}>
           Return to Home
         </button>
       </div>
     );
   }
 
+  // === MAIN TRACKING VIEW ===
   return (
     <div className="tracking-view">
       <button className="back-button" onClick={onBack}>
         ← <span>Pool room</span>
       </button>
+
+      {/* ── Header ── */}
       <div className="tracking-head">
         <div>
-          <p className="eyebrow success-label" style={{ color: '#000', backgroundColor: '#F3F4F6', display: 'inline-block', padding: '4px 8px', borderRadius: '4px' }}>LIVE UBER RIDE · ON THE WAY</p>
+          <p className="eyebrow success-label" style={{ color: '#000', backgroundColor: '#F3F4F6', display: 'inline-block', padding: '4px 8px', borderRadius: '4px' }}>
+            {driverInfo ? 'LIVE UBER RIDE · ON THE WAY' : 'CAMPUSPOOL · RIDE READY'}
+          </p>
           <h2>Heading to {dropoff.name}</h2>
-          <p>{!driverInfo ? "Waiting for driver assignment..." : `Your Uber driver is ${eta} minutes away.`}</p>
+          <p>{!driverInfo ? "Select a driver via Uber to start your ride" : `Driver ${eta} min away · ${displayDistance}`}</p>
         </div>
-        <span className="live-dot">
-          <span className="ping" />
-        </span>
-      </div>
-      <div
-        className="tracking-map-real"
-        style={{
-          width: "100%",
-          height: "260px",
-          padding: "0 20px",
-          marginBottom: "16px",
-          position: "relative",
-        }}
-      >
-        <InteractiveMap
-          pickup={pickup}
-          dropoff={dropoff}
-          onMapClick={() => {}}
-        />
-        <div
-          className="eta-card-overlay"
-          style={{
-            position: "absolute",
-            top: "16px",
-            right: "36px",
-            background: "white",
-            padding: "10px 14px",
-            borderRadius: "12px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-            zIndex: 10,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-          }}
-        >
-          <small
-            style={{ fontSize: "10px", color: "#64748B", fontWeight: 700 }}
-          >
-            ARRIVING IN
-          </small>
-          <strong style={{ fontSize: "24px", lineHeight: 1 }}>
-            {eta}{" "}
-            <em
-              style={{
-                fontSize: "14px",
-                fontStyle: "normal",
-                color: "#64748B",
-              }}
-            >
-              min
-            </em>
-          </strong>
-          <span style={{ fontSize: "12px", color: "#94A3B8" }}>
-            {displayDistance} km away
-          </span>
-        </div>
-      </div>
-      <section className="driver-card">
-        <span className="driver-avatar">{initials}</span>
-        <div className="driver-info">
-          <strong>{driverName}</strong>
-          <span>
-            <Star size={14} fill="#D99B26" /> {driverRating} · {driverVehicle.includes('Auto') || driverVehicle === 'AUTO_3' ? 'Uber Auto' : 'Uber Go'}
-          </span>
-          <small>{driverPlate} · {driverVehicle}</small>
-        </div>
-        <a
-          href={`tel:${driverPhone}`}
-          className="call-button"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Phone size={18} />
-        </a>
-      </section>
-      <div className="trip-progress">
-        <div className="progress-label">
-          <span>{pickup.name}</span>
-          <span>{dropoff.name}</span>
-        </div>
-        <div className="progress-track">
-          <span />
-        </div>
-        <div className="progress-stops">
-          <span>On the way</span>
-          <span>{eta + Math.round(parseFloat(displayDistance as string) * 3)} min left</span>
-        </div>
+        <span className="live-dot"><span className="ping" /></span>
       </div>
 
-      {poolData?.pool?.members && (
-        <section className="members-list" style={{ marginTop: '0', padding: '0 20px', marginBottom: '16px' }}>
-          <div className="members-header" style={{ marginBottom: '12px' }}>
-            <h3 style={{ fontSize: '14px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Co-riders ({poolData.pool.members.length})</h3>
+      {/* ── Map ── */}
+      <div className="tracking-map-real" style={{ width: "100%", height: "220px", padding: "0 20px", marginBottom: "16px", position: "relative" }}>
+        <InteractiveMap pickup={pickup} dropoff={dropoff} onMapClick={() => {}} />
+        {driverInfo && (
+          <div className="eta-card-overlay" style={{ position: "absolute", top: "16px", right: "36px", background: "white", padding: "10px 14px", borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <small style={{ fontSize: "10px", color: "#64748B", fontWeight: 700 }}>ARRIVING IN</small>
+            <strong style={{ fontSize: "24px", lineHeight: 1 }}>{eta} <em style={{ fontSize: "14px", fontStyle: "normal", color: "#64748B" }}>min</em></strong>
+            <span style={{ fontSize: "12px", color: "#94A3B8" }}>{displayDistance} away</span>
           </div>
-          {poolData.pool.members.map((member: any, i: number) => {
-            const isMe = member.userId === (localStorage.getItem("token") || 'demo-user');
-            const initials = isMe ? "Y" : member.userId.split("_")[0][0].toUpperCase();
-            const name = isMe ? "You" : member.userId.split("_")[0].toUpperCase() + '...' + member.userId.slice(-3);
+        )}
+      </div>
+
+      {/* ── Co-Riders Section ── */}
+      <section className="tracking-section co-riders-section">
+        <div className="tracking-section-header">
+          <h3><Users size={16} /> Co-Riders ({poolMembers.length}/{maxCapacity})</h3>
+          <span className="tracking-badge">{vehicle === 'AUTO_3' ? 'Auto' : 'Cab'}</span>
+        </div>
+        <div className="co-riders-list">
+          {poolMembers.map((member: any, i: number) => {
+            const isMe = member.userId === token;
+            const name = member.user?.name || (isMe ? "You" : "Rider " + (i + 1));
+            const initials = name.substring(0, 2).toUpperCase();
+            const memberFare = member.individualFare > 0 ? `₹${member.individualFare}` : "—";
             return (
-              <div className="member-row" key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: i === poolData.pool.members.length - 1 ? 'none' : '1px solid #F1F5F9' }}>
-                <span className={`member-avatar color-${(i % 5) + 1}`} style={{ width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 600, color: 'white' }}>
-                  {initials}
-                </span>
-                <div>
-                  <strong style={{ fontSize: '14px', color: '#0F172A' }}>{name}</strong>
+              <div className={`co-rider-card ${isMe ? 'is-me' : ''}`} key={member.id || i}>
+                <span className={`member-avatar color-${(i % 5) + 1}`}>{initials}</span>
+                <div className="co-rider-info">
+                  <strong>{name} {isMe && <span className="you-badge">You</span>}</strong>
+                  <small>Stop {member.stopSequence} · Share: {memberFare}</small>
                 </div>
+                <span className={member.paymentStatus === 'PAID' ? 'paid-status' : 'pending-status'}>
+                  {member.paymentStatus === 'PAID' ? <><Check size={12} /> Paid</> : 'Pending'}
+                </span>
               </div>
             );
           })}
+          {/* Empty seat placeholders */}
+          {Array.from({ length: Math.max(0, maxCapacity - poolMembers.length) }).map((_, i) => (
+            <div className="co-rider-card empty-seat" key={`empty-${i}`}>
+              <span className="member-avatar empty">?</span>
+              <div className="co-rider-info">
+                <strong>Waiting for rider...</strong>
+                <small>Open seat #{poolMembers.length + i + 1}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Fare Estimate Section ── */}
+      <section className="tracking-section fare-summary-card">
+        <div className="fare-summary-top">
+          <div>
+            <p className="eyebrow">YOUR ESTIMATED SHARE</p>
+            <h2>₹{estimatedShare}</h2>
+          </div>
+          <button className="split-badge" onClick={() => setSplitModalOpen(true)} style={{ border: 'none', background: '#F3F4F6', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '500', color: '#4B5563' }}>
+            <WalletCards size={15} /> View Breakdown
+          </button>
+        </div>
+        <div className="fare-detail-row">
+          <span><Navigation size={14} /> {distance} km</span>
+          <span><Clock3 size={14} /> {time} min</span>
+          <span><Users size={14} /> {poolMembers.length} rider{poolMembers.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="fare-note">
+          <small>Total pool fare: ₹{poolData?.pool?.totalEstimatedFare || fare} · Split by distance traveled · Fare may vary ±₹8</small>
+        </div>
+      </section>
+
+      {/* ── Driver Section ── */}
+      {driverInfo ? (
+        /* Driver Assigned */
+        <>
+          <section className="tracking-section">
+            <div className="tracking-section-header">
+              <h3>🚗 Your Driver</h3>
+              <span className="tracking-badge live">Live</span>
+            </div>
+            <div className="driver-card">
+              <span className="driver-avatar">{driverName.split(" ").map((n: string) => n[0]).join("")}</span>
+              <div className="driver-info">
+                <strong>{driverName}</strong>
+                <span><Star size={14} fill="#D99B26" /> {driverRating} · {driverVehicle.includes('Auto') || vehicle === 'AUTO_3' ? 'Uber Auto' : 'Uber Go'}</span>
+                <small>{driverPlate} · {driverVehicle}</small>
+              </div>
+              <a href={`tel:${driverPhone}`} className="call-button" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Phone size={18} />
+              </a>
+            </div>
+          </section>
+
+          {/* Trip Progress */}
+          <div className="trip-progress">
+            <div className="progress-label"><span>{pickup.name}</span><span>{dropoff.name}</span></div>
+            <div className="progress-track"><span /></div>
+            <div className="progress-stops"><span>On the way</span><span>{eta + Math.round(parseFloat(distance) * 3)} min left</span></div>
+          </div>
+        </>
+      ) : (
+        /* No Driver — Uber Booking Section */
+        <section className="tracking-section uber-booking-card">
+          <div className="uber-booking-header">
+            <div className="uber-logo-mark">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill="#000"/><text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize="7" fontWeight="700" fontFamily="sans-serif">Uber</text></svg>
+            </div>
+            <div>
+              <h3>Book via Uber</h3>
+              <p>CampusPool will redirect your booking to Uber</p>
+            </div>
+          </div>
+          {!showDriverPicker ? (
+            <button className="uber-book-button" onClick={() => setShowDriverPicker(true)}>
+              <CarFront size={18} /> Choose a Driver
+            </button>
+          ) : (
+            <div className="driver-select-list">
+              <div className="driver-select-header">
+                <small>Available {vehicle === 'AUTO_3' ? 'Auto' : 'Cab'} Drivers</small>
+                <button onClick={() => setShowDriverPicker(false)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}><X size={16} /></button>
+              </div>
+              {driverList.map((driver) => (
+                <button key={driver.id} className="driver-option" onClick={() => handleSelectDriver(driver)}>
+                  <span className="driver-option-avatar">{driver.name.split(" ").map((n: string) => n[0]).join("")}</span>
+                  <div className="driver-option-info">
+                    <strong>{driver.name}</strong>
+                    <small>{driver.vehicle} · {driver.vehicleNumber}</small>
+                    <span className="driver-option-meta">
+                      <Star size={12} fill="#D99B26" color="#D99B26" /> {driver.rating} · {driver.trips} trips
+                    </span>
+                  </div>
+                  <div className="driver-option-eta">
+                    <strong>{driver.eta} min</strong>
+                    <small>ETA</small>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="uber-disclaimer">
+            <small>CampusPool is a ride pooling platform. The actual trip is booked and managed through Uber. Payment for the shared fare is collected through CampusPool and forwarded to the ride provider.</small>
+          </div>
         </section>
       )}
 
+      {/* ── Action Buttons ── */}
       <div className="tracking-actions">
-        <button
-          className="share-button"
-          onClick={() => {
-            navigator.clipboard.writeText(window.location.href).catch(() => {});
-            onShare();
-          }}
-        >
+        <button className="share-button" onClick={() => { navigator.clipboard.writeText(window.location.href).catch(() => {}); onShare(); }}>
           <Compass size={18} /> Share trip status
         </button>
-        <button
-          className={sosSent ? "sos-button sent" : "sos-button"}
-          onClick={onSos}
-        >
-          {sosSent ? (
-            <>
-              <Check size={18} /> Alert sent
-            </>
-          ) : (
-            <>
-              <ShieldCheck size={18} /> SOS
-            </>
-          )}
+        <button className={sosSent ? "sos-button sent" : "sos-button"} onClick={onSos}>
+          {sosSent ? (<><Check size={18} /> Alert sent</>) : (<><ShieldCheck size={18} /> SOS</>)}
         </button>
       </div>
-      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', padding: '0 20px', gap: '8px' }}>
-        <button 
-          onClick={handleCancel}
-          style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'left' }}
-        >
-          Cancel Ride
-        </button>
-        {!driverInfo && (
-          <button 
-            onClick={() => handleDispatch(poolData?.pool?.id || "demo-pool-id")}
-            style={{ background: 'transparent', border: 'none', color: '#10B981', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'center' }}
-          >
-            Assign Driver
-          </button>
-        )}
-        <button 
-          onClick={() => setTripEnded(true)}
-          style={{ background: 'transparent', border: 'none', color: '#3B82F6', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'right' }}
-        >
-          Dev: End Trip
-        </button>
-      </div>
+
       {sosSent && (
         <div className="sos-confirm">
           <Check size={17} />
           <span>Emergency contacts notified with your live location.</span>
         </div>
+      )}
+
+      {/* ── Bottom Action Bar ── */}
+      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', padding: '0 4px', gap: '8px' }}>
+        <button onClick={handleCancel} style={{ background: 'transparent', border: 'none', color: '#EF4444', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'left' }}>
+          Cancel Ride
+        </button>
+        <button onClick={() => setTripEnded(true)} style={{ background: 'transparent', border: 'none', color: '#3B82F6', fontWeight: 600, cursor: 'pointer', fontSize: '14px', flex: 1, textAlign: 'right' }}>
+          Dev: End Trip
+        </button>
+      </div>
+
+      {/* ── Floating Chat Button ── */}
+      <button className="chat-fab" onClick={() => setChatOpen(true)} title="Chat with co-riders">
+        <MessageCircle size={22} />
+        {chatMessages.length > 0 && <span className="chat-fab-badge">{chatMessages.length}</span>}
+      </button>
+
+      {/* ── Chat Drawer ── */}
+      {chatOpen && (
+        <div className="drawer-backdrop" onClick={() => setChatOpen(false)}>
+          <aside className="chat-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-head">
+              <div>
+                <p className="eyebrow">POOL CHAT</p>
+                <h3>Ride crew · {poolMembers.length} riders</h3>
+              </div>
+              <button onClick={() => setChatOpen(false)}><X size={20} /></button>
+            </div>
+            <div className="chat-messages">
+              {chatMessages.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94A3B8' }}>
+                  <MessageCircle size={32} style={{ marginBottom: '12px', opacity: 0.4 }} />
+                  <p style={{ fontSize: '14px' }}>No messages yet. Say hello to your co-riders!</p>
+                </div>
+              )}
+              {chatMessages.map((item, index) => (
+                <div className={item.isOwn ? "chat-item own" : "chat-item"} key={`${item.text}-${index}`}>
+                  <strong>{item.isOwn ? "You" : item.name}</strong>
+                  <p>{item.text}</p>
+                  <small>{item.time}</small>
+                </div>
+              ))}
+            </div>
+            <div className="chat-input">
+              <input
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
+                placeholder="Message your crew"
+              />
+              <button onClick={sendChatMessage}><Send size={18} /></button>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* ── Fare Split Modal ── */}
+      {splitModalOpen && (
+        <DistanceSplitModal
+          members={poolMembers.map((m: any, i: number) => ({
+            name: m.user?.name || (m.userId === token ? "You" : "Rider " + (i + 1)),
+            initials: (m.user?.name || "R").substring(0, 2).toUpperCase(),
+            color: m.userId === token ? "navy" : "green",
+            userId: m.userId,
+            individualFare: m.individualFare,
+            distanceKm: m.distanceKm || 0,
+          }))}
+          totalFare={poolData?.pool?.totalEstimatedFare || fare}
+          onClose={() => setSplitModalOpen(false)}
+        />
       )}
     </div>
   );
