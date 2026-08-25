@@ -1254,12 +1254,23 @@ function PoolView({
   // Also ensure current user has a ride request
   const ensureUserHasRideRequest = async () => {
     const dest = DESTINATIONS.find((d) => d.name === (dropoff.name || "Gwalior Railway Station")) || DESTINATIONS[0];
+    
+    // Get the user's actual name from local storage, or fall back to their token
+    let currentUserName = "CampusPool User";
+    try {
+      const u = JSON.parse(localStorage.getItem("user") || "{}");
+      if (u.name) currentUserName = u.name;
+    } catch {
+      // Ignore
+    }
+
     try {
       await fetch(`${apiUrl}/api/rides/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: token,
+          name: currentUserName, // Send name so mockStore can create a real user record
           pickupLocationName: pickup.name || "IIITM Main Gate",
           dropoffLocationName: dest.name,
           pickupLat: pickup.lat || 26.2485,
@@ -2410,7 +2421,7 @@ function DistanceSplitModal({
                     {m.initials}
                   </span>
                   <div>
-                    <strong style={{ display: 'block', fontSize: '14px', marginBottom: '2px' }}>{m.name} {m.userId === (localStorage.getItem("token") || 'demo-user') ? '(You)' : ''}</strong>
+                    <strong style={{ display: 'block', fontSize: '14px', marginBottom: '2px' }}>{m.name.length > 20 ? "Rider" : m.name} {m.userId === (localStorage.getItem("token") || 'demo-user') ? '(You)' : ''}</strong>
                     <span style={{ color: '#6B7280', fontSize: '12px' }}>{m.distanceKm?.toFixed(2) || 0} km · {pct.toFixed(0)}%</span>
                   </div>
                 </div>

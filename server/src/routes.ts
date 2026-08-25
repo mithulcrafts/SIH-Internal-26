@@ -193,6 +193,19 @@ router.post('/rides/request', async (req: Request, res: Response) => {
     }
   })
 
+  // Ensure the user exists in mockStore so we have their name instead of just their ID
+  if (!mockStore.users.find(u => u.id === payload.userId)) {
+    const name = bodyString(req.body.name) || (payload.userId === 'demo-user' ? 'Demo Student' : 'CampusPool User');
+    mockStore.users.push({
+      id: payload.userId,
+      email: `${payload.userId}@iiitm.ac.in`,
+      name,
+      rollNumber: null,
+      emergencyContact: null,
+      createdAt: new Date()
+    })
+  }
+
   const ride: MockRideRequest = { ...payload, id: mockStore.nextId(), status: 'PENDING', createdAt: new Date() }
   mockStore.rideRequests.push(ride)
   await matchPendingRides(payload.vehicleType, true)
