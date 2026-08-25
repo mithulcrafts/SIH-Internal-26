@@ -498,3 +498,6 @@ button{border:0;cursor:pointer}
   .hub-grid button{min-width:135px}
   .support-heading h2{font-size:26px}
 }
+
+.app-logo-large { width: 64px; height: 64px; object-fit: contain; }
+.app-logo { width: 30px; height: 30px; object-fit: contain; }

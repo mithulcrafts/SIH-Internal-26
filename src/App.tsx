@@ -427,9 +427,8 @@ function LoginView({
     <div className="login-page">
       <div className="login-glow" />
       <div className="login-card">
-        <div className="brand-mark iiitm-logo">
-          <span>IIITM</span>
-          <CarFront size={22} strokeWidth={2.5} />
+        <div className="login-brand">
+          <img src="/college-logo.png" alt="IIITM Logo" className="app-logo-large" />
         </div>
         <p className="eyebrow">ABV-IIITM GWALIOR</p>
         <h1>
@@ -507,9 +506,7 @@ function TopBar({
     <header className="topbar">
       <div className="topbar-inner">
         <button className="top-brand" onClick={onHome}>
-          <span className="mini-mark iiitm-logo-mini">
-            <span>IIITM</span>
-          </span>
+          <img src="/college-logo.png" alt="IIITM Logo" className="app-logo" />
           <span>CampusPool</span>
         </button>
         <nav className="top-links">
