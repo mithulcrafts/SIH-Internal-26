@@ -1181,7 +1181,7 @@ function PoolView({
   const [noActiveRides, setNoActiveRides] = useState(false);
 
   // Simulate rider state
-  const [showSimPanel, setShowSimPanel] = useState(false);
+  const [showSimPanel, setShowSimPanel] = useState(() => !!sessionStorage.getItem('simulate-override'));
   const [simName, setSimName] = useState("");
   const [simDestination, setSimDestination] = useState<Location>({ name: "Gwalior Railway Station", lat: 26.2183, lng: 78.1828 });
   const [simVehicle, setSimVehicle] = useState<Vehicle>(vehicle || "AUTO_3");
@@ -1216,9 +1216,10 @@ function PoolView({
             fetch(`${apiUrl}/api/pools/waiting`)
               .then(res => res.json())
               .then(wData => {
-                 if (wData.waiting && wData.waiting.some((w: any) => w.userId === token)) {
+                 if (wData.waiting && wData.waiting.some((w: any) => w.userId === token) && !sessionStorage.getItem('simulate-override')) {
                     onMatching();
                  } else {
+                    sessionStorage.removeItem('simulate-override');
                     setNoActiveRides(true);
                  }
               }).catch(() => setNoActiveRides(true));
@@ -2073,7 +2074,26 @@ function TrackingView({
       <section className="tracking-section co-riders-section">
         <div className="tracking-section-header">
           <h3><Users size={16} /> Co-Riders ({poolMembers.length}/{maxCapacity})</h3>
-          <span className="tracking-badge">{vehicle === 'AUTO_3' ? 'Auto' : 'Cab'}</span>
+          <div>
+            <button
+              onClick={() => {
+                sessionStorage.setItem('simulate-override', 'true');
+                onBack();
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#3B82F6",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: 600,
+                marginRight: "10px",
+              }}
+            >
+              + Add Rider
+            </button>
+            <span className="tracking-badge">{vehicle === 'AUTO_3' ? 'Auto' : 'Cab'}</span>
+          </div>
         </div>
         <div className="co-riders-list">
           {poolMembers.map((member: any, i: number) => {
