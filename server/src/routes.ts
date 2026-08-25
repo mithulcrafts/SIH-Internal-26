@@ -359,9 +359,22 @@ router.delete('/pools/active/:userId', async (req: Request, res: Response) => {
         await prisma.pool.update({ where: { id: m.poolId }, data: { status: 'CANCELLED' } });
       }
     }
+    
     return res.json({ success: true });
   }
+  // Mock store fallback
+  mockStore.rideRequests = mockStore.rideRequests.filter(r => r.userId !== userId);
+  const memberships = mockStore.poolMembers.filter(m => m.userId === userId);
+  mockStore.poolMembers = mockStore.poolMembers.filter(m => m.userId !== userId);
+  for (const m of memberships) {
+    const remaining = mockStore.poolMembers.filter(pm => pm.poolId === m.poolId).length;
+    if (remaining === 0) {
+      const pool = mockStore.pools.find(p => p.id === m.poolId);
+      if (pool) pool.status = 'CANCELLED';
+    }
+  }
   return res.json({ success: true });
+
 })
 
 router.post('/pools/active/:userId/complete', async (req: Request, res: Response) => {

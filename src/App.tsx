@@ -1937,9 +1937,15 @@ function TrackingView({
   const myMember = poolMembers.find((m: any) => m.userId === token);
   const estimatedShare = myMember?.individualFare > 0 ? myMember.individualFare : fare;
 
-  const handleCancel = () => {
-    fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }).catch(console.error);
-    fetch(`${apiUrl}/api/pools/active/${token}`, { method: 'DELETE' }).catch(console.error);
+  const handleCancel = async () => {
+    try {
+      await Promise.all([
+        fetch(`${apiUrl}/api/rides/request/${token}`, { method: 'DELETE' }),
+        fetch(`${apiUrl}/api/pools/active/${token}`, { method: 'DELETE' })
+      ]);
+    } catch (e) {
+      console.error(e);
+    }
     localStorage.setItem("campuspool-stage", "home");
     window.location.href = "/";
   };
